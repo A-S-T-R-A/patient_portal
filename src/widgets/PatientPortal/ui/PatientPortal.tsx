@@ -26,7 +26,7 @@ export function PatientPortal() {
                     Welcome, Valerii!
                   </h1>
                   <p className="text-gray-600">
-                    Here's your treatment overview
+                    Here&apos;s your treatment overview
                   </p>
                 </div>
               </div>

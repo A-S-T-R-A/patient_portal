@@ -22,26 +22,29 @@ export const validateOfferId = (offerId: string): boolean => {
   return typeof offerId === "string" && offerId.length > 0;
 };
 
-export const validateNotificationSettings = (settings: any): boolean => {
+export const validateNotificationSettings = (settings: unknown): boolean => {
   if (typeof settings !== "object" || settings === null) return false;
 
-  if ("pushEnabled" in settings && typeof settings.pushEnabled !== "boolean") {
+  const settingsObj = settings as Record<string, unknown>;
+
+  if ("pushEnabled" in settingsObj && typeof settingsObj.pushEnabled !== "boolean") {
     return false;
   }
 
-  if ("categories" in settings) {
+  if ("categories" in settingsObj) {
     if (
-      typeof settings.categories !== "object" ||
-      settings.categories === null
+      typeof settingsObj.categories !== "object" ||
+      settingsObj.categories === null
     ) {
       return false;
     }
 
+    const categoriesObj = settingsObj.categories as Record<string, unknown>;
     const validCategories = ["reminders", "offers", "updates"];
-    for (const key of Object.keys(settings.categories)) {
+    for (const key of Object.keys(categoriesObj)) {
       if (
         !validCategories.includes(key) ||
-        typeof settings.categories[key] !== "boolean"
+        typeof categoriesObj[key] !== "boolean"
       ) {
         return false;
       }

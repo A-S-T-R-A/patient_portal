@@ -1,58 +1,12 @@
 // Mock database with in-memory state
-export interface UserSummary {
-  name: string;
-  progress: {
-    currentStep: number;
-    totalSteps: number;
-    percent: number;
-  };
-  nextAppointment: Appointment | null;
-  offersCount: number;
-  unreadMessages: number;
-}
-
-export interface TreatmentStep {
-  id: string;
-  title: string;
-  subtitle?: string;
-  status: "done" | "current" | "upcoming";
-  eta?: string;
-}
-
-export interface Appointment {
-  id: string;
-  dateISO: string;
-  doctor: string;
-  type: string;
-  status: "scheduled" | "rescheduled";
-}
-
-export interface Offer {
-  id: string;
-  title: string;
-  subtitle?: string;
-  priceNow: number;
-  priceOld?: number;
-  discountPercent?: number;
-  cta: "View" | "Buy" | "Book";
-}
-
-export interface ChatMessage {
-  id: string;
-  from: "patient" | "doctor";
-  text: string;
-  timestampISO: string;
-  read: boolean;
-}
-
-export interface NotificationSettings {
-  pushEnabled: boolean;
-  categories: {
-    reminders: boolean;
-    offers: boolean;
-    updates: boolean;
-  };
-}
+import { 
+  UserSummary, 
+  TreatmentStep, 
+  Appointment, 
+  Offer, 
+  ChatMessage, 
+  NotificationSettings 
+} from './config/types';
 
 // Initial mock data
 const initialState = {
@@ -231,7 +185,7 @@ export const rescheduleAppointment = (dateISO: string) => {
   if (!state.userSummary.nextAppointment) return false;
 
   state.userSummary.nextAppointment.dateISO = dateISO;
-  state.userSummary.nextAppointment.status = "rescheduled";
+  (state.userSummary.nextAppointment as Appointment).status = "rescheduled";
   return true;
 };
 

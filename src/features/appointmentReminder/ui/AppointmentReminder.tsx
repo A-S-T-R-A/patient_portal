@@ -12,15 +12,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/shared/ui/toast";
+import { Appointment } from "@/shared/config/types";
 import { Calendar, Clock, User, Eye, CalendarDays } from "lucide-react";
-
-interface Appointment {
-  id: string;
-  dateISO: string;
-  doctor: string;
-  type: string;
-  status: "scheduled" | "rescheduled";
-}
 
 export function AppointmentReminder() {
   const [appointment, setAppointment] = useState<Appointment | null>(null);

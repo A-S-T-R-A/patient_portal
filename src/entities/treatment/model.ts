@@ -2,48 +2,53 @@ import { TreatmentStep } from "@/shared/config/types";
 
 export const mockTreatmentSteps: TreatmentStep[] = [
   {
-    id: 1,
+    id: "1",
     title: "Initial Consultation",
-    description: "Meet with your doctor",
-    status: "completed",
-    completedAt: new Date("2024-10-15"),
+    subtitle: "Meet with your doctor",
+    status: "done",
+    eta: "Completed Oct 15",
   },
   {
-    id: 2,
+    id: "2",
     title: "Treatment Planning",
-    description: "Create treatment plan",
-    status: "completed",
-    completedAt: new Date("2024-10-20"),
+    subtitle: "Create treatment plan",
+    status: "done",
+    eta: "Completed Oct 20",
   },
   {
-    id: 3,
+    id: "3",
     title: "Active Treatment",
-    description: "Current step",
+    subtitle: "Current step",
     status: "current",
+    eta: "Expected Nov 5",
   },
   {
-    id: 4,
+    id: "4",
     title: "Follow-up",
-    description: "Monitor progress",
+    subtitle: "Monitor progress",
     status: "upcoming",
+    eta: "Expected Nov 15",
   },
   {
-    id: 5,
+    id: "5",
     title: "Maintenance",
-    description: "Ongoing care",
+    subtitle: "Ongoing care",
     status: "upcoming",
+    eta: "Expected Nov 25",
   },
   {
-    id: 6,
+    id: "6",
     title: "Review",
-    description: "Final assessment",
+    subtitle: "Final assessment",
     status: "upcoming",
+    eta: "Expected Dec 5",
   },
   {
-    id: 7,
+    id: "7",
     title: "Completion",
-    description: "Treatment finished",
+    subtitle: "Treatment finished",
     status: "upcoming",
+    eta: "Expected Dec 15",
   },
 ];
 
@@ -54,7 +59,7 @@ export const getCurrentStep = (
 };
 
 export const getCompletedSteps = (steps: TreatmentStep[]): TreatmentStep[] => {
-  return steps.filter((step) => step.status === "completed");
+  return steps.filter((step) => step.status === "done");
 };
 
 export const getProgressPercentage = (steps: TreatmentStep[]): number => {
