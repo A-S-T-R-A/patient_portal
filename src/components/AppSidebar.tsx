@@ -38,8 +38,8 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-3 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-primary shadow-primary">
-            <Activity className="h-5 w-5 text-white" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-primary shadow-primary shrink-0">
+            <Activity className="h-5 w-5 text-white shrink-0" />
           </div>
           {open && (
             <div className="flex flex-col">

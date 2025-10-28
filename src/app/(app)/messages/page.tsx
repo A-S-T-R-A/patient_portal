@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { MessageSquare, Send, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { toast } from "sonner";
 
 const conversations = [
   {
@@ -35,12 +36,40 @@ const conversations = [
 ];
 
 export default function MessagesPage() {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [conversations, setConversations] = useState([
+    {
+      id: 1,
+      sender: "Dr. Sarah Johnson",
+      role: "Dentist",
+      lastMessage: "Your next appointment is confirmed for Nov 15.",
+      time: "2 hours ago",
+      unread: true,
+    },
+    {
+      id: 2,
+      sender: "Clinic Reception",
+      role: "Staff",
+      lastMessage: "Please arrive 15 minutes early for your checkup.",
+      time: "1 day ago",
+      unread: true,
+    },
+    {
+      id: 3,
+      sender: "Dr. Michael Chen",
+      role: "Specialist",
+      lastMessage: "The X-ray results look great! Everything is healing well.",
+      time: "3 days ago",
+      unread: false,
+    },
+  ]);
+
   const [selectedConversation, setSelectedConversation] = useState(
     conversations[0]
   );
   const [message, setMessage] = useState("");
-
-  const messages = [
+  const [messages, setMessages] = useState([
     {
       id: 1,
       sender: "Dr. Sarah Johnson",
@@ -63,13 +92,55 @@ export default function MessagesPage() {
       time: "10:36 AM",
       isOwn: false,
     },
-  ];
+  ]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleSendMessage = () => {
     if (message.trim()) {
-      // Handle send message logic
+      const newMessage = {
+        id: messages.length + 1,
+        sender: "You",
+        content: message.trim(),
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        isOwn: true,
+      };
+
+      setMessages((prev) => [...prev, newMessage]);
+
+      setTimeout(() => {
+        const doctorResponse = {
+          id: messages.length + 2,
+          sender: selectedConversation.sender,
+          content: "Thank you for your message. I'll get back to you soon!",
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          isOwn: false,
+        };
+        setMessages((prev) => [...prev, doctorResponse]);
+      }, 2000);
+
       setMessage("");
     }
+  };
+
+  const handleSelectConversation = (conv: any) => {
+    setSelectedConversation(conv);
+
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conv.id ? { ...c, unread: false } : c))
+    );
   };
 
   return (
@@ -96,7 +167,7 @@ export default function MessagesPage() {
               {conversations.map((conv) => (
                 <button
                   key={conv.id}
-                  onClick={() => setSelectedConversation(conv)}
+                  onClick={() => handleSelectConversation(conv)}
                   className={`w-full p-4 text-left transition-colors hover:bg-muted/50 ${
                     selectedConversation.id === conv.id ? "bg-muted" : ""
                   }`}
