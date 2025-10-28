@@ -52,7 +52,7 @@ const treatments = [
   },
 ];
 
-const Treatment = () => {
+export default function TreatmentPage() {
   return (
     <div className="space-y-6">
       <div>
@@ -163,6 +163,4 @@ const Treatment = () => {
       </div>
     </div>
   );
-};
-
-export default Treatment;
+}

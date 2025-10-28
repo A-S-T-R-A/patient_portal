@@ -2,7 +2,7 @@ import { QuickStats } from "@/components/dashboard/QuickStats";
 import { UpcomingAppointments } from "@/components/dashboard/UpcomingAppointments";
 import { TreatmentOverview } from "@/components/dashboard/TreatmentOverview";
 
-const Dashboard = () => {
+export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
@@ -10,7 +10,7 @@ const Dashboard = () => {
           Welcome back, Sarah
         </h1>
         <p className="text-muted-foreground">
-          Here's an overview of your dental health journey
+          Here&apos;s an overview of your dental health journey
         </p>
       </div>
 
@@ -22,6 +22,4 @@ const Dashboard = () => {
       </div>
     </div>
   );
-};
-
-export default Dashboard;
+}

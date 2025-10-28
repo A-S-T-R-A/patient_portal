@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { MessageSquare, Send, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,8 +34,10 @@ const conversations = [
   },
 ];
 
-const Messages = () => {
-  const [selectedConversation, setSelectedConversation] = useState(conversations[0]);
+export default function MessagesPage() {
+  const [selectedConversation, setSelectedConversation] = useState(
+    conversations[0]
+  );
   const [message, setMessage] = useState("");
 
   const messages = [
@@ -54,7 +58,8 @@ const Messages = () => {
     {
       id: 3,
       sender: "Dr. Sarah Johnson",
-      content: "That's great to hear! Your next appointment is confirmed for Nov 15.",
+      content:
+        "That's great to hear! Your next appointment is confirmed for Nov 15.",
       time: "10:36 AM",
       isOwn: false,
     },
@@ -70,7 +75,9 @@ const Messages = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Messages</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          Messages
+        </h1>
         <p className="text-muted-foreground">
           Communicate securely with your dental care team
         </p>
@@ -97,21 +104,30 @@ const Messages = () => {
                   <div className="flex items-start gap-3">
                     <Avatar className="h-10 w-10">
                       <AvatarFallback className="bg-primary text-primary-foreground">
-                        {conv.sender.split(" ").map((n) => n[0]).join("")}
+                        {conv.sender
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center justify-between">
-                        <p className="font-semibold text-foreground">{conv.sender}</p>
+                        <p className="font-semibold text-foreground">
+                          {conv.sender}
+                        </p>
                         {conv.unread && (
                           <div className="h-2 w-2 rounded-full bg-primary" />
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{conv.role}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {conv.role}
+                      </p>
                       <p className="truncate text-sm text-muted-foreground">
                         {conv.lastMessage}
                       </p>
-                      <p className="text-xs text-muted-foreground">{conv.time}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {conv.time}
+                      </p>
                     </div>
                   </div>
                 </button>
@@ -125,7 +141,10 @@ const Messages = () => {
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10">
                 <AvatarFallback className="bg-primary text-primary-foreground">
-                  {selectedConversation.sender.split(" ").map((n) => n[0]).join("")}
+                  {selectedConversation.sender
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
                 </AvatarFallback>
               </Avatar>
               <div>
@@ -144,7 +163,9 @@ const Messages = () => {
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`flex ${msg.isOwn ? "justify-end" : "justify-start"}`}
+                    className={`flex ${
+                      msg.isOwn ? "justify-end" : "justify-start"
+                    }`}
                   >
                     <div
                       className={`max-w-[70%] space-y-1 rounded-lg p-3 ${
@@ -186,6 +207,4 @@ const Messages = () => {
       </div>
     </div>
   );
-};
-
-export default Messages;
+}
