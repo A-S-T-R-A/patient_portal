@@ -27,7 +27,10 @@ export const validateNotificationSettings = (settings: unknown): boolean => {
 
   const settingsObj = settings as Record<string, unknown>;
 
-  if ("pushEnabled" in settingsObj && typeof settingsObj.pushEnabled !== "boolean") {
+  if (
+    "pushEnabled" in settingsObj &&
+    typeof settingsObj.pushEnabled !== "boolean"
+  ) {
     return false;
   }
 
