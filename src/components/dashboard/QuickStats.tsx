@@ -1,60 +1,108 @@
-import { Calendar, MessageSquare, Activity, Award } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { Feather } from "@expo/vector-icons";
 
 const stats = [
   {
     label: "Next Appointment",
     value: "Nov 15",
     subtext: "in 3 days",
-    icon: Calendar,
-    color: "text-primary",
-    bgColor: "bg-primary/10",
+    iconName: "calendar" as const,
+    color: "#007AFF",
+    bgColor: "#E6F2FF",
   },
   {
     label: "Unread Messages",
     value: "2",
     subtext: "from clinic",
-    icon: MessageSquare,
-    color: "text-accent",
-    bgColor: "bg-accent/10",
+    iconName: "message-square" as const,
+    color: "#34C759",
+    bgColor: "#E8F5E9",
   },
   {
     label: "Active Treatments",
     value: "2",
     subtext: "in progress",
-    icon: Activity,
-    color: "text-primary",
-    bgColor: "bg-primary/10",
+    iconName: "activity" as const,
+    color: "#007AFF",
+    bgColor: "#E6F2FF",
   },
   {
     label: "Completed",
     value: "8",
     subtext: "treatments",
-    icon: Award,
-    color: "text-success",
-    bgColor: "bg-success/10",
+    iconName: "award" as const,
+    color: "#34C759",
+    bgColor: "#E8F5E9",
   },
 ];
 
 export function QuickStats() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <View style={styles.container}>
       {stats.map((stat) => (
-        <Card key={stat.label} className="shadow-md transition-all hover:shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className={`rounded-lg p-3 ${stat.bgColor}`}>
-                <stat.icon className={`h-5 w-5 ${stat.color}`} />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
-                <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                <p className="text-xs text-muted-foreground">{stat.subtext}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <View key={stat.label} style={styles.card}>
+          <View
+            style={[styles.iconContainer, { backgroundColor: stat.bgColor }]}
+          >
+            <Feather name={stat.iconName} size={20} color={stat.color} />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.label}>{stat.label}</Text>
+            <Text style={styles.value}>{stat.value}</Text>
+            <Text style={styles.subtext}>{stat.subtext}</Text>
+          </View>
+        </View>
       ))}
-    </div>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginVertical: 8,
+  },
+  card: {
+    flex: 1,
+    minWidth: "47%",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  textContainer: {
+    flex: 1,
+  },
+  label: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 4,
+  },
+  value: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: 2,
+  },
+  subtext: {
+    fontSize: 10,
+    color: "#666",
+  },
+});

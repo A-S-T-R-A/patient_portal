@@ -1,6 +1,6 @@
-import { Activity, CheckCircle, Clock } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { Feather } from "@expo/vector-icons";
 
 const treatments = [
   {
@@ -28,38 +28,115 @@ const treatments = [
 
 export function TreatmentOverview() {
   return (
-    <Card className="shadow-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Activity className="h-5 w-5 text-primary" />
-          Treatment Overview
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-6">
-          {treatments.map((treatment) => (
-            <div key={treatment.id} className="space-y-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-medium text-foreground">{treatment.name}</p>
-                  <p className="text-sm text-muted-foreground">{treatment.nextStep}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  {treatment.status === "completed" ? (
-                    <CheckCircle className="h-4 w-4 text-success" />
-                  ) : (
-                    <Clock className="h-4 w-4 text-primary" />
-                  )}
-                  <span className="text-sm font-medium text-foreground">
-                    {treatment.progress}%
-                  </span>
-                </div>
-              </div>
-              <Progress value={treatment.progress} className="h-2" />
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Feather name="activity" size={20} color="#007AFF" />
+        <Text style={styles.title}>Treatment Overview</Text>
+      </View>
+
+      <View style={styles.content}>
+        {treatments.map((treatment) => (
+          <View key={treatment.id} style={styles.treatmentCard}>
+            <View style={styles.treatmentHeader}>
+              <View style={styles.treatmentInfo}>
+                <Text style={styles.treatmentName}>{treatment.name}</Text>
+                <Text style={styles.treatmentStep}>{treatment.nextStep}</Text>
+              </View>
+              <View style={styles.progressInfo}>
+                {treatment.status === "completed" ? (
+                  <Feather name="check-circle" size={16} color="#34C759" />
+                ) : (
+                  <Feather name="clock" size={16} color="#007AFF" />
+                )}
+                <Text style={styles.progressText}>{treatment.progress}%</Text>
+              </View>
+            </View>
+            <View style={styles.progressBarContainer}>
+              <View
+                style={[
+                  styles.progressBar,
+                  { width: `${treatment.progress}%` },
+                  treatment.status === "completed" &&
+                    styles.progressBarComplete,
+                ]}
+              />
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 16,
+    marginVertical: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#000",
+  },
+  content: {
+    gap: 20,
+  },
+  treatmentCard: {
+    gap: 8,
+  },
+  treatmentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  treatmentInfo: {
+    flex: 1,
+  },
+  treatmentName: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#000",
+    marginBottom: 4,
+  },
+  treatmentStep: {
+    fontSize: 12,
+    color: "#666",
+  },
+  progressInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#000",
+  },
+  progressBarContainer: {
+    height: 8,
+    backgroundColor: "#E5E5E5",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: "#007AFF",
+    borderRadius: 4,
+  },
+  progressBarComplete: {
+    backgroundColor: "#34C759",
+  },
+});
