@@ -1,0 +1,82 @@
+"use client";
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { API_BASE, connectEvents } from "@/lib/api";
+import { useSearchParams } from "next/navigation";
+
+type Patient = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+};
+
+import * as React from "react";
+
+function MyPatientsPageInner() {
+  const searchParams = useSearchParams();
+  const doctorIdParam = searchParams.get("doctorId") || undefined;
+  const doctorId = doctorIdParam || "seed"; // mock doctor
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/doctors/${doctorId}/patients`)
+      .then((r) => r.json())
+      .then((data) => setPatients(data.patients ?? []))
+      .finally(() => setLoading(false));
+    // realtime subscribe for doctor
+    const es = connectEvents({ doctorId });
+    es.addEventListener("doctor.assign", () => {
+      // pull fresh list on assign
+      fetch(`${API_BASE}/doctors/${doctorId}/patients`)
+        .then((r) => r.json())
+        .then((data) => setPatients(data.patients ?? []));
+    });
+    return () => es.close();
+  }, [doctorId]);
+
+  return (
+    <div>
+      <h1 className="text-2xl font-bold mb-4">My patients</h1>
+      {loading ? (
+        <p className="text-gray-500">Loading…</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="py-2 pr-4">Name</th>
+                <th className="py-2 pr-4">Email</th>
+                <th className="py-2 pr-4">Phone</th>
+                <th className="py-2 pr-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {patients.map((p) => (
+                <tr key={p.id} className="border-b hover:bg-gray-50">
+                  <td className="py-2 pr-4">{p.name}</td>
+                  <td className="py-2 pr-4">{p.email}</td>
+                  <td className="py-2 pr-4">{p.phone || "—"}</td>
+                  <td className="py-2 pr-4">
+                    <Link href={`/patients/${p.id}`} className="text-blue-600">
+                      Open
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function MyPatientsPage() {
+  return (
+    <Suspense fallback={<div className="text-gray-500">Loading…</div>}>
+      <MyPatientsPageInner />
+    </Suspense>
+  );
+}

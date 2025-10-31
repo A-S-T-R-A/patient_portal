@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Doctor {
+  id        String          @id @default(cuid())
+  email     String          @unique
+  name      String
+  googleId  String?         @unique
+  picture   String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  patients  DoctorPatient[]
+}
+
+model Patient {
+  id             String           @id @default(cuid())
+  email          String           @unique
+  name           String
+  phone          String?
+  googleId       String?          @unique
+  picture        String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  doctorLinks    DoctorPatient[]
+  treatmentPlans TreatmentPlan[]
+  appointments   Appointment[]
+  messages       Message[]
+}
+
+model DoctorPatient {
+  doctorId  String
+  patientId String
+  createdAt DateTime @default(now())
+
+  doctor  Doctor  @relation(fields: [doctorId], references: [id])
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@id([doctorId, patientId])
+}
+
+model TreatmentPlan {
+  id        String   @id @default(cuid())
+  patientId String
+  title     String
+  status    String
+  steps     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id])
+}
+
+model Appointment {
+  id        String   @id @default(cuid())
+  patientId String
+  title     String
+  datetime  DateTime
+  location  String?
+  type      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id])
+  requests RescheduleRequest[]
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  patientId String
+  sender    String
+  content   String
+  createdAt DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id])
+}
+
+model RescheduleRequest {
+  id             String   @id @default(cuid())
+  appointmentId  String
+  requestedAt    DateTime @default(now())
+  requestedBy    String   // 'patient' | 'doctor'
+  requestedWhen  DateTime
+  status         String   @default("pending") // pending | approved | declined
+  decidedAt      DateTime?
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+}
+

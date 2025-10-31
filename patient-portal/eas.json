@@ -1,0 +1,25 @@
+{
+  "cli": {
+    "version": ">= 12.0.0"
+  },
+  "build": {
+    "preview": {
+      "ios": {
+        "distribution": "internal",
+        "autoIncrement": "version"
+      },
+      "android": {
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE": "https://patient-portal-admin-service-production.up.railway.app/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://patient-portal-admin-service-production.up.railway.app"
+      }
+    }
+  },
+  "submit": {
+    "ios": {
+      "ascAppId": null
+    }
+  }
+}
