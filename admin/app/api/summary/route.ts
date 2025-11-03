@@ -1,7 +1,8 @@
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireDoctor } from "@/lib/auth";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const authDoctorId = await requireDoctor(req).catch((r) => {
     if (r instanceof Response) return r;
     return new Response(JSON.stringify({ error: "Unauthorized" }), {

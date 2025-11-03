@@ -1,7 +1,8 @@
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() || "";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);

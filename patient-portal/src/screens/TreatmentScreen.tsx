@@ -1,42 +1,79 @@
-import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { API_BASE, resolvePatientId } from "../lib/api";
+import { useAuth } from "../lib/queries";
 
-const treatments = [
-  {
-    id: 1,
-    name: "Root Canal Treatment",
-    progress: 75,
-    status: "in-progress",
-    nextStep: "Final restoration scheduled",
-    description: "Root canal procedure to treat infected tooth",
-    startDate: "Sep 15, 2025",
-    estimatedCompletion: "Dec 2025",
-  },
-  {
-    id: 2,
-    name: "Dental Implant",
-    progress: 40,
-    status: "in-progress",
-    nextStep: "Osseointegration period",
-    description: "Titanium implant placement for missing tooth replacement",
-    startDate: "Aug 20, 2025",
-    estimatedCompletion: "Feb 2026",
-  },
-  {
-    id: 3,
-    name: "Teeth Whitening",
-    progress: 100,
-    status: "completed",
-    nextStep: "Follow-up in 6 months",
-    description: "Professional teeth whitening treatment",
-    startDate: "Jun 10, 2025",
-    estimatedCompletion: "Jun 15, 2025",
-    completionDate: "Jun 15, 2025",
-  },
-];
+type TreatmentPlan = {
+  id: string;
+  title: string;
+  status: string;
+  procedures: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    scheduledDate?: string;
+    completedDate?: string;
+    status: string;
+    appointment?: {
+      id: string;
+      title: string;
+      datetime: string;
+    };
+  }>;
+};
 
 export default function TreatmentScreen() {
+  const { data: authData } = useAuth();
+  const patientId = authData?.role === "patient" ? authData.userId : null;
+  const [plans, setPlans] = useState<TreatmentPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const id = patientId || (await resolvePatientId());
+      if (!id) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/patients/${id}`, {
+          credentials: "include",
+        });
+        const data = await res.json();
+        setPlans(data.plans || []);
+      } catch (error) {
+        console.error("Failed to fetch treatments:", error);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [patientId]);
+
+  const calculateProgress = (plan: TreatmentPlan) => {
+    if (plan.procedures.length === 0) return 0;
+    const completed = plan.procedures.filter(
+      (p) => p.status === "completed"
+    ).length;
+    return Math.round((completed / plan.procedures.length) * 100);
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -51,63 +88,119 @@ export default function TreatmentScreen() {
         </View>
 
         <View style={styles.treatmentsList}>
-          {treatments.map((treatment) => (
-            <View key={treatment.id} style={styles.treatmentCard}>
-              <View style={styles.treatmentHeader}>
-                <View style={styles.treatmentInfo}>
-                  <Text style={styles.treatmentName}>{treatment.name}</Text>
-                  <Text style={styles.treatmentDescription}>
-                    {treatment.description}
-                  </Text>
-                </View>
-                <View style={styles.progressInfo}>
-                  <Text style={{ fontSize: 18 }}>
-                    {treatment.status === "completed" ? "✅" : "⏰"}
-                  </Text>
-                  <Text style={styles.progressText}>{treatment.progress}%</Text>
-                </View>
-              </View>
-
-              <View style={styles.progressBarContainer}>
-                <View
-                  style={[
-                    styles.progressBar,
-                    { width: `${treatment.progress}%` },
-                    treatment.status === "completed" &&
-                      styles.progressBarComplete,
-                  ]}
-                />
-              </View>
-
-              <View style={styles.treatmentDetails}>
-                <View style={styles.detailRow}>
-                  <Text>➡️</Text>
-                  <Text style={styles.detailText}>{treatment.nextStep}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text>📅</Text>
-                  <Text style={styles.detailText}>
-                    Started: {treatment.startDate}
-                  </Text>
-                </View>
-                {treatment.completionDate ? (
-                  <View style={styles.detailRow}>
-                    <Text>✅</Text>
-                    <Text style={styles.detailText}>
-                      Completed: {treatment.completionDate}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.detailRow}>
-                    <Text>📅</Text>
-                    <Text style={styles.detailText}>
-                      Est. completion: {treatment.estimatedCompletion}
-                    </Text>
-                  </View>
-                )}
-              </View>
+          {plans.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No active treatments</Text>
+              <Text style={styles.emptySubtext}>
+                Your treatment plans will appear here
+              </Text>
             </View>
-          ))}
+          ) : (
+            plans.map((plan) => {
+              const progress = calculateProgress(plan);
+              const nextProcedure = plan.procedures.find(
+                (p) => p.status !== "completed"
+              );
+              return (
+                <View key={plan.id} style={styles.treatmentCard}>
+                  <View style={styles.treatmentHeader}>
+                    <View style={styles.treatmentInfo}>
+                      <Text style={styles.treatmentName}>{plan.title}</Text>
+                      <Text style={styles.treatmentDescription}>
+                        {plan.procedures.length} procedure
+                        {plan.procedures.length !== 1 ? "s" : ""}
+                      </Text>
+                    </View>
+                    <View style={styles.progressInfo}>
+                      <Text style={{ fontSize: 18 }}>
+                        {plan.status === "completed" ? "✅" : "⏰"}
+                      </Text>
+                      <Text style={styles.progressText}>{progress}%</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.progressBarContainer}>
+                    <View
+                      style={[
+                        styles.progressBar,
+                        { width: `${progress}%` },
+                        plan.status === "completed" &&
+                          styles.progressBarComplete,
+                      ]}
+                    />
+                  </View>
+
+                  <View style={styles.treatmentDetails}>
+                    {nextProcedure && (
+                      <View style={styles.detailRow}>
+                        <Text>➡️</Text>
+                        <Text style={styles.detailText}>
+                          Next: {nextProcedure.title}
+                          {nextProcedure.scheduledDate
+                            ? ` (${new Date(
+                                nextProcedure.scheduledDate
+                              ).toLocaleDateString()})`
+                            : ""}
+                        </Text>
+                      </View>
+                    )}
+                    {plan.procedures.length > 0 && (
+                      <View style={styles.detailRow}>
+                        <Text>📋</Text>
+                        <Text style={styles.detailText}>
+                          {
+                            plan.procedures.filter(
+                              (p) => p.status === "completed"
+                            ).length
+                          }{" "}
+                          of {plan.procedures.length} completed
+                        </Text>
+                      </View>
+                    )}
+                    {plan.procedures.some((p) => p.appointment) && (
+                      <View style={styles.detailRow}>
+                        <Text>📅</Text>
+                        <Text style={styles.detailText}>
+                          Linked to appointments
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {plan.procedures.length > 0 && (
+                    <View style={styles.proceduresList}>
+                      <Text style={styles.proceduresTitle}>Procedures:</Text>
+                      {plan.procedures.map((proc) => (
+                        <View key={proc.id} style={styles.procedureItem}>
+                          <Text style={styles.procedureName}>
+                            {proc.status === "completed"
+                              ? "✅"
+                              : proc.status === "scheduled"
+                              ? "📅"
+                              : "⏸️"}{" "}
+                            {proc.title}
+                          </Text>
+                          {proc.description && (
+                            <Text style={styles.procedureDesc}>
+                              {proc.description}
+                            </Text>
+                          )}
+                          {proc.appointment && (
+                            <Text style={styles.procedureAppt}>
+                              📅 {proc.appointment.title} -{" "}
+                              {new Date(
+                                proc.appointment.datetime
+                              ).toLocaleDateString()}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -118,6 +211,59 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: 18,
+    color: "#666",
+    marginBottom: 8,
+    fontWeight: "500",
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
+  },
+  proceduresList: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E5E5",
+  },
+  proceduresTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 8,
+  },
+  procedureItem: {
+    marginBottom: 8,
+    paddingLeft: 8,
+  },
+  procedureName: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#000",
+    marginBottom: 2,
+  },
+  procedureDesc: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  procedureAppt: {
+    fontSize: 11,
+    color: "#007AFF",
+    marginTop: 2,
   },
   scrollView: {
     flex: 1,

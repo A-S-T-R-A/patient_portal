@@ -11,7 +11,8 @@ model Doctor {
   id        String          @id @default(cuid())
   email     String          @unique
   name      String
-  googleId  String?         @unique
+  password  String? // Hashed password for admin login (nullable for migration)
+  googleId  String?         @unique // Keep for backwards compatibility, but not used
   picture   String?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
@@ -19,14 +20,14 @@ model Doctor {
 }
 
 model Patient {
-  id             String           @id @default(cuid())
-  email          String           @unique
+  id             String          @id @default(cuid())
+  email          String          @unique
   name           String
   phone          String?
-  googleId       String?          @unique
+  googleId       String?         @unique
   picture        String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   doctorLinks    DoctorPatient[]
   treatmentPlans TreatmentPlan[]
   appointments   Appointment[]
@@ -53,7 +54,24 @@ model TreatmentPlan {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  patient Patient @relation(fields: [patientId], references: [id])
+  patient    Patient     @relation(fields: [patientId], references: [id])
+  procedures Procedure[]
+}
+
+model Procedure {
+  id              String    @id @default(cuid())
+  treatmentPlanId String?
+  appointmentId   String?
+  title           String
+  description     String?
+  scheduledDate   DateTime?
+  completedDate   DateTime?
+  status          String    @default("planned") // planned, scheduled, completed, cancelled
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  treatmentPlan TreatmentPlan? @relation(fields: [treatmentPlanId], references: [id])
+  appointment   Appointment?   @relation(fields: [appointmentId], references: [id])
 }
 
 model Appointment {
@@ -66,8 +84,9 @@ model Appointment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  patient Patient @relation(fields: [patientId], references: [id])
-  requests RescheduleRequest[]
+  patient    Patient             @relation(fields: [patientId], references: [id])
+  requests   RescheduleRequest[]
+  procedures Procedure[]
 }
 
 model Message {
@@ -81,14 +100,13 @@ model Message {
 }
 
 model RescheduleRequest {
-  id             String   @id @default(cuid())
-  appointmentId  String
-  requestedAt    DateTime @default(now())
-  requestedBy    String   // 'patient' | 'doctor'
-  requestedWhen  DateTime
-  status         String   @default("pending") // pending | approved | declined
-  decidedAt      DateTime?
+  id            String    @id @default(cuid())
+  appointmentId String
+  requestedAt   DateTime  @default(now())
+  requestedBy   String // 'patient' | 'doctor'
+  requestedWhen DateTime
+  status        String    @default("pending") // pending | approved | declined
+  decidedAt     DateTime?
 
   appointment Appointment @relation(fields: [appointmentId], references: [id])
 }
-

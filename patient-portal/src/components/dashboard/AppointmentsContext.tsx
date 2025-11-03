@@ -4,8 +4,9 @@ import {
   useEffect,
   useState,
   ReactNode,
+  useRef,
 } from "react";
-import { API_BASE, connectEvents, resolvePatientId } from "../../lib/api";
+import { API_BASE, connectSocket, resolvePatientId } from "../../lib/api";
 import Toast from "react-native-toast-message";
 
 type Appointment = {
@@ -28,36 +29,81 @@ const AppointmentsContext = createContext<AppointmentsContextType | undefined>(
 
 export function AppointmentsProvider({ children }: { children: ReactNode }) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const wsRef = useRef<any | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let es: EventSource | null = null;
+    let mounted = true;
     (async () => {
       const patientId = await resolvePatientId();
       if (!patientId) return;
-      const res = await fetch(`${API_BASE}/patients/${patientId}`);
-      const data = await res.json();
-      const appts = (data.appointments || []) as Appointment[];
-      setAppointments(appts);
-      es = connectEvents({ patientId });
-      es.addEventListener("appointment.update", (e: MessageEvent) => {
-        try {
-          const payload = JSON.parse((e as any).data);
-          const appt = payload?.appointment as Appointment | undefined;
-          if (appt)
-            setAppointments((arr) =>
-              arr.map((a) => (a.id === appt.id ? appt : a))
+
+      // Load initial appointments
+      try {
+        const res = await fetch(`${API_BASE}/patients/${patientId}`, {
+          credentials: "include",
+        });
+        const data = await res.json();
+        const appts = (data.appointments || []) as Appointment[];
+        if (mounted) {
+          setAppointments(appts);
+        }
+      } catch (error) {
+        console.error("Failed to load appointments:", error);
+      }
+
+      // Setup Socket.IO connection for real-time updates
+      if (!wsRef.current) {
+        const socket: any = connectSocket({ patientId });
+        wsRef.current = socket;
+
+        // Listen for new appointments
+        socket.on("appointment:new", ({ appointment }: any) => {
+          if (mounted) {
+            setAppointments((prev) => {
+              // Check if appointment already exists
+              const exists = prev.some((a) => a.id === appointment.id);
+              if (exists) return prev;
+              // Add new appointment
+              return [...prev, appointment].sort(
+                (a, b) =>
+                  new Date(a.datetime).getTime() -
+                  new Date(b.datetime).getTime()
+              );
+            });
+          }
+        });
+
+        // Listen for appointment updates
+        socket.on("appointment:update", ({ appointment }: any) => {
+          if (mounted) {
+            setAppointments((prev) =>
+              prev.map((a) => (a.id === appointment.id ? appointment : a))
             );
-          if (appt) {
             Toast.show({
               type: "success",
               text1: "Appointment rescheduled",
-              text2: new Date(appt.datetime).toLocaleString(),
+              text2: new Date(appointment.datetime).toLocaleString(),
             });
           }
-        } catch {}
-      });
+        });
+
+        // Listen for appointment cancellations
+        socket.on("appointment:cancelled", ({ appointmentId }: any) => {
+          if (mounted) {
+            setAppointments((prev) =>
+              prev.filter((a) => a.id !== appointmentId)
+            );
+          }
+        });
+      }
     })();
-    return () => es?.close();
+
+    return () => {
+      mounted = false;
+      mountedRef.current = false;
+      // Don't disconnect socket - it's shared singleton
+    };
   }, []);
 
   return (

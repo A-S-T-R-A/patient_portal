@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { API_BASE, resolvePatientId } from "../../lib/api";
+import { useAuth, usePatient, useUnreadMessages } from "../../lib/queries";
 
 type Plan = { id: string; title: string; status: string; steps: any };
 type Appointment = {
@@ -10,55 +10,29 @@ type Appointment = {
   location?: string | null;
 };
 
-type Msg = { sender: string; createdAt: string };
-
 export function QuickStats() {
-  const [nextAppointment, setNextAppointment] = useState<Appointment | null>(
-    null
-  );
-  const [activeTreatments, setActiveTreatments] = useState<number>(0);
-  const [completedTreatments, setCompletedTreatments] = useState<number>(0);
-  const [unread, setUnread] = useState<number>(0);
+  const { data: authData } = useAuth();
+  const patientId = authData?.role === "patient" ? authData.userId : null;
+  const { data: patientData } = usePatient(patientId);
+  const { data: unreadData } = useUnreadMessages(patientId);
 
-  useEffect(() => {
-    (async () => {
-      const patientId = await resolvePatientId();
-      if (!patientId) return;
-      const res = await fetch(`${API_BASE}/patients/${patientId}`);
-      const data = await res.json();
-      const appts: Appointment[] = data.appointments || [];
-      const plans: Plan[] = data.plans || [];
-      const now = new Date();
-      const upcoming = appts
-        .filter((a) => new Date(a.datetime) >= now)
-        .sort(
-          (a, b) =>
-            new Date(a.datetime).getTime() - new Date(b.datetime).getTime()
-        );
-      setNextAppointment(upcoming[0] || null);
-      setActiveTreatments(plans.filter((p) => p.status !== "completed").length);
-      setCompletedTreatments(
-        plans.filter((p) => p.status === "completed").length
-      );
+  const appts: Appointment[] = patientData?.appointments || [];
+  const plans: Plan[] = patientData?.plans || [];
 
-      const msgs: Msg[] = (data.messages || []) as Msg[];
-      // Try to use lastReadAt saved by Messages screen (web)
-      let lastRead = 0;
-      try {
-        if (typeof window !== "undefined") {
-          const s = window.localStorage.getItem("pp_lastReadAt");
-          if (s) lastRead = new Date(s).getTime();
-        }
-      } catch {}
-      if (!lastRead) lastRead = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      setUnread(
-        msgs.filter(
-          (m) =>
-            m.sender === "doctor" && new Date(m.createdAt).getTime() > lastRead
-        ).length
-      );
-    })();
-  }, []);
+  const now = new Date();
+  const upcoming = appts
+    .filter((a) => new Date(a.datetime) >= now)
+    .sort(
+      (a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime()
+    );
+  const nextAppointment = upcoming[0] || null;
+
+  const activeTreatments = plans.filter((p) => p.status !== "completed").length;
+  const completedTreatments = plans.filter(
+    (p) => p.status === "completed"
+  ).length;
+
+  const unread = unreadData?.count || 0;
 
   const cards = useMemo(() => {
     return [

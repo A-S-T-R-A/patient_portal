@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { assertSameDoctor, requireDoctor } from "@/lib/auth";
 
@@ -12,7 +13,7 @@ async function resolveDoctorId(id: string) {
 }
 
 export async function GET(
-  _req: Request,
+  _req: NextRequest,
   { params }: { params: Promise<{ doctorId: string }> }
 ) {
   const authDoctorId = await requireDoctor(_req).catch((r) => {

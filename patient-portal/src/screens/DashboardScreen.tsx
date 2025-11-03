@@ -6,8 +6,15 @@ import { QuickStats } from "../components/dashboard/QuickStats";
 import { UpcomingAppointments } from "../components/dashboard/UpcomingAppointments";
 import { TreatmentOverview } from "../components/dashboard/TreatmentOverview";
 import { AppointmentsProvider } from "../components/dashboard/AppointmentsContext";
+import { useAuth, usePatient } from "../lib/queries";
 
 export default function DashboardScreen() {
+  const { data: authData } = useAuth();
+  const patientId = authData?.role === "patient" ? authData.userId : null;
+  const { data: patientData } = usePatient(patientId);
+
+  const patientName = authData?.name || patientData?.patient?.name || "there";
+
   return (
     <AppointmentsProvider>
       <SafeAreaView style={styles.container}>
@@ -16,7 +23,9 @@ export default function DashboardScreen() {
           contentContainerStyle={styles.content}
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Welcome back, Sarah</Text>
+            <Text style={styles.title}>
+              Welcome back{patientName ? `, ${patientName}` : ""}
+            </Text>
             <Text style={styles.subtitle}>
               Here's an overview of your dental health journey
             </Text>

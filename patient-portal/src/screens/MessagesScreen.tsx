@@ -17,22 +17,12 @@ import { API_BASE, connectSocket, resolvePatientId } from "../lib/api";
 const screenWidth = Dimensions.get("window").width;
 const isMobile = screenWidth < 768;
 
-const initialConversations = [
-  {
-    id: 1,
-    sender: "Your Doctor",
-    role: "Doctor",
-    lastMessage: "",
-    time: "",
-    unread: false,
-  },
-];
-
 export default function MessagesScreen() {
   const messagesEndRef = useRef<ScrollView>(null);
   const wsRef = useRef<any | null>(null);
+  const selectedConversationRef = useRef<any>(null);
   const [patientId, setPatientId] = useState<string | null>(null);
-  const [conversations, setConversations] = useState(initialConversations);
+  const [conversations, setConversations] = useState<any[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [showChat, setShowChat] = useState(false);
   const [message, setMessage] = useState("");
@@ -40,19 +30,83 @@ export default function MessagesScreen() {
   const [isConversationsCollapsed, setIsConversationsCollapsed] =
     useState(false);
 
+  // Keep ref in sync with state
   useEffect(() => {
-    // Resolve patient once on mount
+    selectedConversationRef.current = selectedConversation;
+  }, [selectedConversation]);
+
+  useEffect(() => {
+    // Resolve patient once on mount and load conversations
     (async () => {
       const id = await resolvePatientId();
       setPatientId(id);
+      if (!id) return;
+
       try {
+        // Load patient data and messages
+        const [messagesRes, patientRes] = await Promise.all([
+          fetch(`${API_BASE}/patients/${id}/messages`, {
+            credentials: "include",
+          }),
+          fetch(`${API_BASE}/patients/${id}`, {
+            credentials: "include",
+          }),
+        ]);
+
+        const messagesData = await messagesRes.json();
+        const patientData = await patientRes.json();
+        const msgs = messagesData.messages || [];
+        const appointments = patientData.appointments || [];
+
+        // Check if there are any scheduled (future) appointments
+        const now = new Date();
+        const hasScheduledAppointment = appointments.some(
+          (apt: any) => new Date(apt.datetime) > now
+        );
+
+        // Check if there are any messages from a doctor
+        const hasDoctorMessages = msgs.some((m: any) => m.sender === "doctor");
+
+        // Show conversation if there are doctor messages OR scheduled appointments
+        if (hasDoctorMessages || hasScheduledAppointment) {
+          let doctorName = "Your Doctor";
+
+          // Get last message overall (not just from doctor)
+          const lastMsg = msgs.sort(
+            (a: any, b: any) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )[0];
+
+          setConversations([
+            {
+              id: 1,
+              sender: doctorName,
+              role: "Doctor",
+              lastMessage: lastMsg?.content || "",
+              time: lastMsg
+                ? new Date(lastMsg.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "",
+              unread: false,
+            },
+          ]);
+        } else {
+          // No doctor messages and no scheduled appointments - don't show conversations
+          setConversations([]);
+        }
+
         if (typeof window !== "undefined") {
           window.localStorage.setItem(
             "pp_lastReadAt",
             new Date().toISOString()
           );
         }
-      } catch {}
+      } catch (e) {
+        console.error("Failed to load conversations:", e);
+        setConversations([]);
+      }
     })();
   }, []);
 
@@ -93,15 +147,34 @@ export default function MessagesScreen() {
   // Single Socket.IO connection
   useEffect(() => {
     if (!patientId) return;
-    if (wsRef.current) return; // prevent duplicates
-    const socket: any = connectSocket({ patientId });
-    wsRef.current = socket;
-    socket.on("message:new", ({ message: m }: any) => {
+    let mounted = true;
+
+    // Get or create socket connection
+    let socket: any = wsRef.current;
+
+    // If socket doesn't exist or is disconnected, create/reuse singleton
+    if (!socket || !socket.connected) {
+      socket = connectSocket({ patientId });
+      wsRef.current = socket;
+    }
+
+    // Setup message listeners (remove old ones first to prevent duplicates)
+    const messagesClearedHandler = () => {
+      if (mounted) {
+        setMessages([]);
+        setConversations([]);
+        setSelectedConversation(null);
+      }
+    };
+
+    const messageNewHandler = ({ message: m }: any) => {
+      // Only process messages for this patient
+      if (!mounted || !m || (m.patientId && m.patientId !== patientId)) return;
       const rendered = {
         id: m.id,
         sender:
           m.sender === "doctor"
-            ? selectedConversation?.sender || "Doctor"
+            ? selectedConversationRef.current?.sender || "Doctor"
             : "You",
         content: m.content,
         time: new Date(m.createdAt).toLocaleTimeString([], {
@@ -111,6 +184,89 @@ export default function MessagesScreen() {
         isOwn: m.sender !== "doctor",
       };
       setMessages((prev) => [...prev, rendered]);
+
+      // If it's a message from doctor and we don't have a conversation yet, create one
+      if (m.sender === "doctor") {
+        setConversations((prev) => {
+          const existingConv = prev.find((conv) => conv.id === 1);
+          if (!existingConv) {
+            // Create new conversation for first doctor message
+            return [
+              {
+                id: 1,
+                sender: "Your Doctor",
+                role: "Doctor",
+                lastMessage: m.content,
+                time: new Date(m.createdAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                unread: true,
+              },
+            ];
+          } else {
+            // Update last message in existing conversation (always update with latest message)
+            return prev.map((conv) =>
+              conv.id === 1
+                ? {
+                    ...conv,
+                    lastMessage: m.content,
+                    time: new Date(m.createdAt).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
+                    unread:
+                      (m.sender === "doctor" &&
+                        (!selectedConversationRef.current ||
+                          selectedConversationRef.current.id !== conv.id)) ||
+                      false,
+                  }
+                : conv
+            );
+          }
+        });
+
+        // If this is first message and we're not in chat view, auto-select the conversation
+        if (!selectedConversation && !showChat) {
+          setSelectedConversation({
+            id: 1,
+            sender: "Your Doctor",
+            role: "Doctor",
+            lastMessage: m.content,
+            time: new Date(m.createdAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            unread: false,
+          });
+          // Load messages for this conversation
+          (async () => {
+            try {
+              const res = await fetch(
+                `${API_BASE}/patients/${patientId}/messages`,
+                {
+                  credentials: "include",
+                }
+              );
+              const data = await res.json();
+              const msgs = data.messages || [];
+              const rendered = msgs.map((msg: any) => ({
+                id: msg.id,
+                content: msg.content,
+                time: new Date(msg.createdAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                isOwn: msg.sender !== "doctor",
+              }));
+              setMessages(rendered);
+            } catch (e) {
+              console.error("Failed to load messages:", e);
+            }
+          })();
+        }
+      }
+
       try {
         if (typeof window !== "undefined") {
           window.localStorage.setItem(
@@ -119,35 +275,107 @@ export default function MessagesScreen() {
           );
         }
       } catch {}
-      Toast.show({
-        type: "info",
-        text1:
-          m.sender === "doctor" ? "New message from doctor" : "Message sent",
-        text2: rendered.content,
-      });
-    });
-    return () => {
-      wsRef.current?.disconnect?.();
-      wsRef.current = null;
+
+      // Show toast notification (already have native notification in App.tsx)
+      // But toast helps for web version
+      if (m.sender === "doctor") {
+        Toast.show({
+          type: "info",
+          text1: "New message from doctor",
+          text2: rendered.content,
+        });
+      }
     };
-  }, [patientId, selectedConversation?.sender]);
+
+    // Remove old listeners before adding new ones
+    socket.off("messages:cleared");
+    socket.off("message:new");
+
+    // Add new listeners
+    socket.on("messages:cleared", messagesClearedHandler);
+    socket.on("message:new", messageNewHandler);
+
+    return () => {
+      mounted = false;
+      // Only remove listeners, don't disconnect socket (it's singleton)
+      if (socket) {
+        socket.off("messages:cleared", messagesClearedHandler);
+        socket.off("message:new", messageNewHandler);
+      }
+      // Only clear ref if we're sure this component is unmounting
+      // Don't clear if patientId changes - keep socket for next render
+    };
+  }, [patientId]);
 
   const handleSendMessage = async () => {
     if (!message.trim()) return;
     if (!patientId) return;
-    const socket: any = wsRef.current;
-    const prev = message;
-    socket?.emit(
+
+    let socket: any = wsRef.current;
+
+    // If socket doesn't exist or is disconnected, reconnect
+    if (!socket || !socket.connected) {
+      socket = connectSocket({ patientId });
+      wsRef.current = socket;
+
+      // Wait for connection
+      if (!socket.connected) {
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => resolve(), 2000);
+          socket.once("connect", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+          socket.once("connect_error", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+
+        // If still not connected, show error
+        if (!socket.connected) {
+          Toast.show({
+            type: "error",
+            text1: "Connection lost",
+            text2: "Please refresh the page",
+          });
+          return;
+        }
+      }
+    }
+
+    const prev = message.trim();
+    const msgContent = prev;
+    setMessage(""); // Clear input immediately
+
+    socket.emit(
       "message:send",
-      { patientId, sender: "patient", content: message.trim() },
+      { patientId, sender: "patient", content: msgContent },
       (ack: any) => {
         if (!ack?.ok) {
-          setMessage(prev);
+          // Revert input on failure
+          setMessage(msgContent);
           Toast.show({ type: "error", text1: "Failed to send message" });
+        } else {
+          // Update conversation last message when message is sent successfully
+          setConversations((prev) =>
+            prev.map((conv) =>
+              conv.id === 1
+                ? {
+                    ...conv,
+                    lastMessage: msgContent,
+                    time: new Date().toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
+                  }
+                : conv
+            )
+          );
         }
       }
     );
-    setMessage("");
+
     try {
       if (typeof window !== "undefined") {
         window.localStorage.setItem("pp_lastReadAt", new Date().toISOString());
@@ -263,6 +491,13 @@ export default function MessagesScreen() {
                 value={message}
                 onChangeText={setMessage}
                 multiline
+                onSubmitEditing={() => {
+                  if (message.trim()) {
+                    handleSendMessage();
+                  }
+                }}
+                blurOnSubmit={false}
+                returnKeyType="send"
               />
               <TouchableOpacity
                 style={styles.sendButton}
@@ -291,30 +526,43 @@ export default function MessagesScreen() {
           </View>
 
           <ScrollView style={styles.conversationsScroll}>
-            {conversations.map((conv) => (
-              <TouchableOpacity
-                key={conv.id}
-                style={styles.conversationItem}
-                onPress={() => handleSelectConversation(conv)}
-              >
-                <View style={styles.conversationAvatar}>
-                  <Text style={styles.conversationAvatarText}>
-                    {getInitials(conv.sender)}
-                  </Text>
-                </View>
-                <View style={styles.conversationContent}>
-                  <View style={styles.conversationHeader}>
-                    <Text style={styles.conversationSender}>{conv.sender}</Text>
-                    {conv.unread && <View style={styles.unreadDot} />}
+            {conversations.length === 0 ? (
+              <View style={styles.emptyConversations}>
+                <Text style={styles.emptyConversationsText}>
+                  No conversations yet
+                </Text>
+                <Text style={styles.emptyConversationsSubtext}>
+                  When your doctor sends a message, it will appear here
+                </Text>
+              </View>
+            ) : (
+              conversations.map((conv) => (
+                <TouchableOpacity
+                  key={conv.id}
+                  style={styles.conversationItem}
+                  onPress={() => handleSelectConversation(conv)}
+                >
+                  <View style={styles.conversationAvatar}>
+                    <Text style={styles.conversationAvatarText}>
+                      {getInitials(conv.sender)}
+                    </Text>
                   </View>
-                  <Text style={styles.conversationRole}>{conv.role}</Text>
-                  <Text style={styles.conversationMessage} numberOfLines={1}>
-                    {conv.lastMessage}
-                  </Text>
-                  <Text style={styles.conversationTime}>{conv.time}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+                  <View style={styles.conversationContent}>
+                    <View style={styles.conversationHeader}>
+                      <Text style={styles.conversationSender}>
+                        {conv.sender}
+                      </Text>
+                      {conv.unread && <View style={styles.unreadDot} />}
+                    </View>
+                    <Text style={styles.conversationRole}>{conv.role}</Text>
+                    <Text style={styles.conversationMessage} numberOfLines={1}>
+                      {conv.lastMessage}
+                    </Text>
+                    <Text style={styles.conversationTime}>{conv.time}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -344,36 +592,50 @@ export default function MessagesScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.conversationsScroll}>
-              {conversations.map((conv) => (
-                <TouchableOpacity
-                  key={conv.id}
-                  style={[
-                    styles.conversationItem,
-                    selectedConversation?.id === conv.id &&
-                      styles.conversationItemActive,
-                  ]}
-                  onPress={() => handleSelectConversation(conv)}
-                >
-                  <View style={styles.conversationAvatar}>
-                    <Text style={styles.conversationAvatarText}>
-                      {getInitials(conv.sender)}
-                    </Text>
-                  </View>
-                  <View style={styles.conversationContent}>
-                    <View style={styles.conversationHeader}>
-                      <Text style={styles.conversationSender}>
-                        {conv.sender}
+              {conversations.length === 0 ? (
+                <View style={styles.emptyConversations}>
+                  <Text style={styles.emptyConversationsText}>
+                    No conversations yet
+                  </Text>
+                  <Text style={styles.emptyConversationsSubtext}>
+                    When your doctor sends a message, it will appear here
+                  </Text>
+                </View>
+              ) : (
+                conversations.map((conv) => (
+                  <TouchableOpacity
+                    key={conv.id}
+                    style={[
+                      styles.conversationItem,
+                      selectedConversation?.id === conv.id &&
+                        styles.conversationItemActive,
+                    ]}
+                    onPress={() => handleSelectConversation(conv)}
+                  >
+                    <View style={styles.conversationAvatar}>
+                      <Text style={styles.conversationAvatarText}>
+                        {getInitials(conv.sender)}
                       </Text>
-                      {conv.unread && <View style={styles.unreadDot} />}
                     </View>
-                    <Text style={styles.conversationRole}>{conv.role}</Text>
-                    <Text style={styles.conversationMessage} numberOfLines={1}>
-                      {conv.lastMessage}
-                    </Text>
-                    <Text style={styles.conversationTime}>{conv.time}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                    <View style={styles.conversationContent}>
+                      <View style={styles.conversationHeader}>
+                        <Text style={styles.conversationSender}>
+                          {conv.sender}
+                        </Text>
+                        {conv.unread && <View style={styles.unreadDot} />}
+                      </View>
+                      <Text style={styles.conversationRole}>{conv.role}</Text>
+                      <Text
+                        style={styles.conversationMessage}
+                        numberOfLines={1}
+                      >
+                        {conv.lastMessage}
+                      </Text>
+                      <Text style={styles.conversationTime}>{conv.time}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
             </ScrollView>
           </View>
         )}
@@ -459,6 +721,13 @@ export default function MessagesScreen() {
                 value={message}
                 onChangeText={setMessage}
                 multiline
+                onSubmitEditing={() => {
+                  if (message.trim()) {
+                    handleSendMessage();
+                  }
+                }}
+                blurOnSubmit={false}
+                returnKeyType="send"
               />
               <TouchableOpacity
                 style={styles.sendButton}
@@ -730,5 +999,21 @@ const styles = StyleSheet.create({
   sendButtonText: {
     fontSize: 20,
     color: "#fff",
+  },
+  emptyConversations: {
+    padding: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyConversationsText: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  emptyConversationsSubtext: {
+    fontSize: 12,
+    color: "#999",
+    textAlign: "center",
   },
 });

@@ -1,9 +1,10 @@
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { broadcast } from "@/lib/events";
 import { getIO } from "@/lib/io";
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ appointmentId: string }> }
 ) {
   const { appointmentId } = await params;

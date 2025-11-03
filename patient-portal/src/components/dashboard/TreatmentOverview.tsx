@@ -25,33 +25,42 @@ export function TreatmentOverview() {
       </View>
 
       <View style={styles.content}>
-        {plans.map((plan) => (
-          <View key={plan.id} style={styles.treatmentCard}>
-            <View style={styles.treatmentHeader}>
-              <View style={styles.treatmentInfo}>
-                <Text style={styles.treatmentName}>{plan.title}</Text>
-                <Text style={styles.treatmentStep}>{plan.status}</Text>
-              </View>
-              <View style={styles.progressInfo}>
-                <Text style={{ fontSize: 16 }}>
-                  {plan.status === "completed" ? "✅" : "⏰"}
-                </Text>
-                <Text style={styles.progressText}>
-                  {plan.status === "completed" ? "100%" : ""}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.progressBarContainer}>
-              <View
-                style={[
-                  styles.progressBar,
-                  { width: `${plan.status === "completed" ? 100 : 30}%` },
-                  plan.status === "completed" && styles.progressBarComplete,
-                ]}
-              />
-            </View>
+        {plans.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No active treatments</Text>
+            <Text style={styles.emptySubtext}>
+              Your treatment plans will appear here
+            </Text>
           </View>
-        ))}
+        ) : (
+          plans.map((plan) => (
+            <View key={plan.id} style={styles.treatmentCard}>
+              <View style={styles.treatmentHeader}>
+                <View style={styles.treatmentInfo}>
+                  <Text style={styles.treatmentName}>{plan.title}</Text>
+                  <Text style={styles.treatmentStep}>{plan.status}</Text>
+                </View>
+                <View style={styles.progressInfo}>
+                  <Text style={{ fontSize: 16 }}>
+                    {plan.status === "completed" ? "✅" : "⏰"}
+                  </Text>
+                  <Text style={styles.progressText}>
+                    {plan.status === "completed" ? "100%" : ""}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.progressBarContainer}>
+                <View
+                  style={[
+                    styles.progressBar,
+                    { width: `${plan.status === "completed" ? 100 : 30}%` },
+                    plan.status === "completed" && styles.progressBarComplete,
+                  ]}
+                />
+              </View>
+            </View>
+          ))
+        )}
       </View>
     </View>
   );
@@ -127,5 +136,19 @@ const styles = StyleSheet.create({
   },
   progressBarComplete: {
     backgroundColor: "#34C759",
+  },
+  emptyState: {
+    padding: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 12,
+    color: "#999",
   },
 });

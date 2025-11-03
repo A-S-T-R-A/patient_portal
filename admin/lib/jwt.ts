@@ -9,6 +9,7 @@ export interface JWTPayload {
   email: string;
   role: "doctor" | "patient";
   googleId?: string;
+  [key: string]: string | undefined; // Index signature for jose compatibility
 }
 
 export async function signToken(payload: JWTPayload): Promise<string> {
@@ -27,4 +28,3 @@ export async function verifyToken(token: string): Promise<JWTPayload | null> {
     return null;
   }
 }
-

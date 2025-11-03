@@ -20,6 +20,535 @@ type Patient = { id: string; name: string; email: string };
 
 import * as React from "react";
 
+function TreatmentPlansSection({
+  patientId,
+  plans,
+  appointments,
+  onPlansUpdate,
+}: {
+  patientId: string;
+  plans: Plan[];
+  appointments: Appointment[];
+  onPlansUpdate: (plans: Plan[]) => void;
+}) {
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [showProcedureForm, setShowProcedureForm] = useState<string | null>(
+    null
+  );
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const [expandedPlans, setExpandedPlans] = useState<Set<string>>(new Set());
+
+  const togglePlan = (planId: string) => {
+    const newExpanded = new Set(expandedPlans);
+    if (newExpanded.has(planId)) {
+      newExpanded.delete(planId);
+    } else {
+      newExpanded.add(planId);
+    }
+    setExpandedPlans(newExpanded);
+  };
+
+  const fetchPlans = async () => {
+    const res = await fetch(`${API_BASE}/treatment-plans/${patientId}`);
+    const data = await res.json();
+    onPlansUpdate(data.plans || []);
+  };
+
+  useEffect(() => {
+    fetchPlans();
+  }, [patientId]);
+
+  return (
+    <section className="bg-white/80 backdrop-blur rounded-xl border shadow-sm p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xl font-semibold">Treatment Plans</h2>
+        <button
+          onClick={() => setShowPlanForm(!showPlanForm)}
+          className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+        >
+          {showPlanForm ? "Cancel" : "+ New Plan"}
+        </button>
+      </div>
+
+      {showPlanForm && (
+        <CreateTreatmentPlanForm
+          patientId={patientId}
+          onSuccess={() => {
+            setShowPlanForm(false);
+            fetchPlans();
+          }}
+        />
+      )}
+
+      {plans.length === 0 ? (
+        <p className="text-slate-500">No treatment plans</p>
+      ) : (
+        <div className="space-y-3 mt-3">
+          {plans.map((plan) => (
+            <div key={plan.id} className="border rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-slate-900">
+                    {plan.title}
+                  </div>
+                  <div className="text-sm text-slate-600">
+                    Status: {plan.status}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => togglePlan(plan.id)}
+                    className="px-2 py-1 text-xs border rounded hover:bg-slate-100"
+                  >
+                    {expandedPlans.has(plan.id) ? "Collapse" : "Expand"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedPlan(plan);
+                      setShowProcedureForm(plan.id);
+                    }}
+                    className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    + Procedure
+                  </button>
+                </div>
+              </div>
+              {expandedPlans.has(plan.id) && (
+                <div className="mt-3 pt-3 border-t">
+                  <ProceduresList
+                    planId={plan.id}
+                    appointments={appointments}
+                    onUpdate={fetchPlans}
+                    procedures={(plan as any).procedures}
+                  />
+                  {showProcedureForm === plan.id && (
+                    <CreateProcedureForm
+                      treatmentPlanId={plan.id}
+                      appointments={appointments}
+                      onSuccess={() => {
+                        setShowProcedureForm(null);
+                        fetchPlans();
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CreateTreatmentPlanForm({
+  patientId,
+  onSuccess,
+}: {
+  patientId: string;
+  onSuccess: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [status, setStatus] = useState("active");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/treatment-plans/${patientId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, status }),
+      });
+      if (res.ok) {
+        onSuccess();
+      } else {
+        alert("Failed to create treatment plan");
+      }
+    } catch (error) {
+      alert("Failed to create treatment plan");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="border rounded-lg p-4 mb-3 bg-slate-50"
+    >
+      <div className="space-y-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Title
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            className="w-full border rounded px-3 py-2 text-sm"
+            placeholder="e.g., Dental Cleaning, Orthodontic Treatment"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Status
+          </label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="w-full border rounded px-3 py-2 text-sm"
+          >
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+            <option value="on-hold">On Hold</option>
+          </select>
+        </div>
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onSuccess}
+          className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={loading || !title}
+          className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+        >
+          {loading ? "Creating..." : "Create"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ProceduresList({
+  planId,
+  appointments,
+  onUpdate,
+  procedures,
+}: {
+  planId: string;
+  appointments: Appointment[];
+  onUpdate: () => void;
+  procedures?: any[];
+}) {
+  if (!procedures || procedures.length === 0)
+    return <div className="text-sm text-slate-500">No procedures yet</div>;
+
+  return (
+    <div className="space-y-2">
+      {procedures.map((proc) => (
+        <div
+          key={proc.id}
+          className="text-sm border-l-2 border-blue-200 pl-3 py-2"
+        >
+          <div className="font-medium">{proc.title}</div>
+          {proc.description && (
+            <div className="text-slate-600">{proc.description}</div>
+          )}
+          {proc.scheduledDate && (
+            <div className="text-xs text-slate-500">
+              Scheduled: {new Date(proc.scheduledDate).toLocaleDateString()}
+            </div>
+          )}
+          {proc.appointment && (
+            <div className="text-xs text-slate-500">
+              Linked to: {proc.appointment.title} (
+              {new Date(proc.appointment.datetime).toLocaleDateString()})
+            </div>
+          )}
+          <div className="text-xs">
+            Status: <span className="font-medium">{proc.status}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CreateProcedureForm({
+  treatmentPlanId,
+  appointments,
+  onSuccess,
+}: {
+  treatmentPlanId: string;
+  appointments: Appointment[];
+  onSuccess: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [appointmentId, setAppointmentId] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/procedures`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          treatmentPlanId,
+          appointmentId: appointmentId || undefined,
+          title,
+          description,
+          scheduledDate: scheduledDate || undefined,
+        }),
+      });
+      if (res.ok) {
+        onSuccess();
+      } else {
+        alert("Failed to create procedure");
+      }
+    } catch (error) {
+      alert("Failed to create procedure");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="border rounded-lg p-3 mt-3 bg-white"
+    >
+      <div className="space-y-2">
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Procedure Title
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            className="w-full border rounded px-2 py-1 text-sm"
+            placeholder="e.g., Cleaning, X-ray, Extraction"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Description
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full border rounded px-2 py-1 text-sm"
+            rows={2}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Link to Appointment (optional)
+          </label>
+          <select
+            value={appointmentId}
+            onChange={(e) => setAppointmentId(e.target.value)}
+            className="w-full border rounded px-2 py-1 text-sm"
+          >
+            <option value="">None</option>
+            {appointments.map((apt) => (
+              <option key={apt.id} value={apt.id}>
+                {apt.title} - {new Date(apt.datetime).toLocaleDateString()}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Scheduled Date (optional)
+          </label>
+          <input
+            type="date"
+            value={scheduledDate}
+            onChange={(e) => setScheduledDate(e.target.value)}
+            className="w-full border rounded px-2 py-1 text-sm"
+          />
+        </div>
+      </div>
+      <div className="mt-2 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onSuccess}
+          className="px-2 py-1 text-xs border rounded hover:bg-slate-100"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={loading || !title}
+          className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? "Creating..." : "Create"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function CreateAppointmentForm({
+  patientId,
+  plans,
+  onSuccess,
+}: {
+  patientId: string;
+  plans: Plan[];
+  onSuccess: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [datetime, setDatetime] = useState("");
+  const [location, setLocation] = useState("");
+  const [type, setType] = useState("consultation");
+  const [treatmentPlanId, setTreatmentPlanId] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !datetime) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/appointments/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId,
+          title,
+          datetime,
+          location,
+          type,
+          treatmentPlanId: treatmentPlanId || undefined,
+        }),
+      });
+      if (res.ok) {
+        onSuccess();
+      } else {
+        alert("Failed to create appointment");
+      }
+    } catch (error) {
+      alert("Failed to create appointment");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="border rounded-lg p-4 mb-3 bg-slate-50"
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Title
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            className="w-full border rounded px-3 py-2 text-sm"
+            placeholder="e.g., Consultation, Follow-up"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Date & Time
+          </label>
+          <input
+            type="datetime-local"
+            value={datetime}
+            onChange={(e) => setDatetime(e.target.value)}
+            required
+            min={new Date().toISOString().slice(0, 16)}
+            className="w-full border rounded px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Location
+          </label>
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="w-full border rounded px-3 py-2 text-sm"
+            placeholder="e.g., Office 101"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Type
+          </label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-full border rounded px-3 py-2 text-sm"
+          >
+            <option value="consultation">Consultation</option>
+            <option value="follow-up">Follow-up</option>
+            <option value="procedure">Procedure</option>
+            <option value="check-up">Check-up</option>
+          </select>
+        </div>
+        {plans.length > 0 && (
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Treatment Plan (optional)
+            </label>
+            <select
+              value={treatmentPlanId}
+              onChange={(e) => setTreatmentPlanId(e.target.value)}
+              className="w-full border rounded px-3 py-2 text-sm"
+            >
+              <option value="">None</option>
+              {plans.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setTitle("");
+            setDatetime("");
+            setLocation("");
+            setType("consultation");
+            setTreatmentPlanId("");
+            onSuccess();
+          }}
+          className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={loading || !title || !datetime}
+          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? "Creating..." : "Create"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function PatientDetail({
   params,
 }: {
@@ -36,27 +565,55 @@ export default function PatientDetail({
     id: string;
     when: string;
   } | null>(null);
+  const [showAppointmentForm, setShowAppointmentForm] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    let mounted = true;
     fetch(`${API_BASE}/patients/${patientId}`)
       .then((r) => r.json())
       .then((data) => {
+        if (!mounted) return;
         setPatient(data.patient);
         setPlans(data.plans ?? []);
         setAppointments(data.appointments ?? []);
         setMessages(data.messages ?? []);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
     // Realtime updates via WebSocket
+    // Use singleton socket - don't disconnect it, just change rooms
     const socket: any = connectSocket({ patientId });
-    socket.on("message:new", ({ message }: any) => {
-      setMessages((m) => [...m, message]);
-    });
+
+    // Store socket reference globally for sendMessage
     (window as any).__adminPatientSocket = socket;
-    return () => socket.disconnect();
+    (window as any).__adminPatientId = patientId;
+
+    // Setup message listener with patientId filter to ensure we only get messages for this patient
+    const messageHandler = ({ message }: any) => {
+      // Only add message if it's for this patient
+      if (mounted && message?.patientId === patientId) {
+        setMessages((m) => [...m, message]);
+      }
+    };
+
+    // Remove any existing listener first to prevent duplicates
+    socket.off("message:new");
+    socket.on("message:new", messageHandler);
+
+    return () => {
+      mounted = false;
+      // Only cleanup listener, don't disconnect socket
+      socket.off("message:new", messageHandler);
+      // Clear global reference if this is still the current patient
+      if ((window as any).__adminPatientId === patientId) {
+        (window as any).__adminPatientSocket = null;
+        (window as any).__adminPatientId = null;
+      }
+    };
   }, [patientId]);
 
   useLayoutEffect(() => {
@@ -68,19 +625,52 @@ export default function PatientDetail({
 
   const sendMessage = async () => {
     if (!message.trim()) return;
-    const socket: any | undefined = (window as any).__adminPatientSocket;
-    socket?.emit(
+    if (!patientId) return;
+
+    // Get current socket - should always exist due to useEffect
+    let socket: any = (window as any).__adminPatientSocket;
+
+    // If socket doesn't exist (shouldn't happen), create it
+    if (!socket) {
+      socket = connectSocket({ patientId });
+      (window as any).__adminPatientSocket = socket;
+    }
+
+    // Wait for connection if not connected
+    if (!socket.connected) {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => resolve(), 2000); // Timeout after 2 seconds
+        socket.once("connect", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+        socket.once("connect_error", () => {
+          clearTimeout(timeout);
+          resolve(); // Don't wait forever
+        });
+      });
+
+      // If still not connected after waiting, show error
+      if (!socket.connected) {
+        alert("Connection lost. Please refresh the page.");
+        return;
+      }
+    }
+
+    const msgContent = message.trim();
+    setMessage(""); // Clear input immediately
+
+    socket.emit(
       "message:send",
-      { patientId, sender: "doctor", content: message.trim() },
+      { patientId, sender: "doctor", content: msgContent },
       (ack: any) => {
         if (!ack?.ok) {
           // revert input on failure
-          setMessage(message);
+          setMessage(msgContent);
           alert("Failed to send message");
         }
       }
     );
-    setMessage("");
   };
 
   const onMessageKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -118,27 +708,44 @@ export default function PatientDetail({
         <p className="text-slate-600">{patient.email}</p>
       </section>
 
-      <section className="bg-white/80 backdrop-blur rounded-xl border shadow-sm p-5">
-        <h2 className="text-xl font-semibold mb-3">Treatment plan</h2>
-        {plans.length === 0 ? (
-          <p className="text-slate-500">No plan</p>
-        ) : (
-          <ul className="list-disc pl-5 text-sm text-slate-800">
-            {plans.map((p) => (
-              <li key={p.id}>
-                <span className="font-medium">{p.title}</span> — {p.status}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <TreatmentPlansSection
+        patientId={patientId}
+        plans={plans}
+        appointments={appointments}
+        onPlansUpdate={(newPlans) => setPlans(newPlans)}
+      />
 
       <section className="bg-white/80 backdrop-blur rounded-xl border shadow-sm p-5">
-        <h2 className="text-xl font-semibold mb-3">Appointments</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xl font-semibold">Appointments</h2>
+          <button
+            onClick={() => setShowAppointmentForm(!showAppointmentForm)}
+            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            {showAppointmentForm ? "Cancel" : "+ New Appointment"}
+          </button>
+        </div>
+
+        {showAppointmentForm && (
+          <CreateAppointmentForm
+            patientId={patientId}
+            plans={plans}
+            onSuccess={() => {
+              setShowAppointmentForm(false);
+              // Refetch appointments
+              fetch(`${API_BASE}/patients/${patientId}`)
+                .then((r) => r.json())
+                .then((data) => {
+                  setAppointments(data.appointments ?? []);
+                });
+            }}
+          />
+        )}
+
         {appointments.length === 0 ? (
           <p className="text-slate-500">No appointments</p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-2 mt-3">
             {appointments.map((a) => (
               <li
                 key={a.id}
@@ -178,17 +785,52 @@ export default function PatientDetail({
                       </button>
                     </>
                   ) : (
-                    <button
-                      className="px-2 py-1 text-sm border rounded hover:bg-slate-100"
-                      onClick={() => {
-                        const iso = new Date(a.datetime)
-                          .toISOString()
-                          .slice(0, 16);
-                        setReschedule({ id: a.id, when: iso });
-                      }}
-                    >
-                      Reschedule
-                    </button>
+                    <>
+                      <button
+                        className="px-2 py-1 text-sm border rounded hover:bg-slate-100"
+                        onClick={() => {
+                          const iso = new Date(a.datetime)
+                            .toISOString()
+                            .slice(0, 16);
+                          setReschedule({ id: a.id, when: iso });
+                        }}
+                      >
+                        Reschedule
+                      </button>
+                      <button
+                        className="px-2 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                        onClick={async () => {
+                          if (
+                            !confirm(
+                              "Are you sure you want to cancel this appointment?"
+                            )
+                          )
+                            return;
+                          try {
+                            const res = await fetch(
+                              `${API_BASE}/appointments/${a.id}`,
+                              {
+                                method: "DELETE",
+                              }
+                            );
+                            if (res.ok) {
+                              // Refetch appointments
+                              fetch(`${API_BASE}/patients/${patientId}`)
+                                .then((r) => r.json())
+                                .then((data) => {
+                                  setAppointments(data.appointments ?? []);
+                                });
+                            } else {
+                              alert("Failed to cancel appointment");
+                            }
+                          } catch (error) {
+                            alert("Failed to cancel appointment");
+                          }
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </>
                   )}
                 </div>
               </li>
@@ -198,47 +840,96 @@ export default function PatientDetail({
       </section>
 
       <section className="bg-white/80 backdrop-blur rounded-xl border shadow-sm p-5">
-        <h2 className="text-xl font-semibold mb-3">Messages</h2>
-        <div
-          ref={messagesContainerRef}
-          className="border rounded-lg p-3 space-y-2 max-h-80 overflow-auto bg-white"
-        >
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={
-                "text-sm flex " +
-                (m.sender === "doctor" ? "justify-end" : "justify-start")
-              }
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xl font-semibold">Messages</h2>
+          {messages.length > 0 && (
+            <button
+              onClick={async () => {
+                if (
+                  !confirm(
+                    "Are you sure you want to clear all messages with this patient? This action cannot be undone."
+                  )
+                )
+                  return;
+                try {
+                  const res = await fetch(
+                    `${API_BASE}/patients/${patientId}/messages`,
+                    {
+                      method: "DELETE",
+                    }
+                  );
+                  if (res.ok) {
+                    setMessages([]);
+                  } else {
+                    alert("Failed to clear messages");
+                  }
+                } catch (error) {
+                  alert("Failed to clear messages");
+                }
+              }}
+              className="px-3 py-1.5 text-sm text-red-600 border border-red-600 rounded hover:bg-red-50 transition"
             >
+              Clear chat
+            </button>
+          )}
+        </div>
+        {messages.length === 0 ? (
+          <div className="border rounded-lg p-8 bg-slate-50 text-center">
+            <div className="text-slate-400 text-4xl mb-3">💬</div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">
+              No messages yet
+            </h3>
+            <p className="text-slate-600 mb-4">
+              Start the conversation by sending the first message
+            </p>
+          </div>
+        ) : (
+          <div
+            ref={messagesContainerRef}
+            className="border rounded-lg p-3 space-y-2 max-h-80 overflow-auto bg-white"
+          >
+            {messages.map((m) => (
               <div
+                key={m.id}
                 className={
-                  (m.sender === "doctor"
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-900") +
-                  " px-3 py-2 rounded-xl shadow-sm max-w-[70%]"
+                  "text-sm flex " +
+                  (m.sender === "doctor" ? "justify-end" : "justify-start")
                 }
               >
-                {m.content}
-                <div className="mt-1 text-[10px] opacity-70 text-right">
-                  {new Date(m.createdAt).toLocaleTimeString()}
+                <div
+                  className={
+                    (m.sender === "doctor"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-900") +
+                    " px-3 py-2 rounded-xl shadow-sm max-w-[70%]"
+                  }
+                >
+                  {m.content}
+                  <div className="mt-1 text-[10px] opacity-70 text-right">
+                    {new Date(m.createdAt).toLocaleTimeString()}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
         <div className="mt-3 flex gap-2">
           <input
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={onMessageKeyDown}
-            placeholder="Type a message"
+            placeholder={
+              messages.length === 0
+                ? "Write your first message..."
+                : "Type a message"
+            }
             className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             onClick={sendMessage}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm shadow hover:bg-blue-700"
+            disabled={!message.trim()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Send
           </button>

@@ -11,23 +11,114 @@ import {
   Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth, usePatient } from "../lib/queries";
+import { logout } from "../lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 
 const screenWidth = Dimensions.get("window").width;
+
+type TreatmentPlan = {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: string;
+};
 
 export default function ProfileScreen() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const slideAnim = useRef(new Animated.Value(screenWidth)).current;
   const [profileData, setProfileData] = useState({
-    name: "Sarah Johnson",
-    email: "sarah.johnson@email.com",
-    phone: "+1 (555) 123-4567",
-    birthDate: "Jan 15, 1985",
-    location: "New York, NY",
+    name: "",
+    email: "",
+    phone: "",
+    birthDate: "",
+    location: "",
   });
+  const [currentTreatments, setCurrentTreatments] = useState<TreatmentPlan[]>(
+    []
+  );
+  const [completedTreatments, setCompletedTreatments] = useState<
+    TreatmentPlan[]
+  >([]);
+  const [patientSince, setPatientSince] = useState<string>("");
 
   const [formData, setFormData] = useState(profileData);
+
+  // Use TanStack Query hooks
+  const { data: authData } = useAuth();
+  const patientId = authData?.role === "patient" ? authData.userId : null;
+  const { data: patientData, isLoading: isLoadingPatient } =
+    usePatient(patientId);
+  const queryClient = useQueryClient();
+
+  const handleLogout = async () => {
+    try {
+      // Clear all queries first to stop retries
+      queryClient.clear();
+      queryClient.cancelQueries();
+      // Then logout (which will redirect)
+      await logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
+      // Force redirect even on error
+      if (typeof window !== "undefined") {
+        window.location.href = "/";
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isLoadingPatient) {
+      setLoading(true);
+      return;
+    }
+
+    setLoading(false);
+
+    const patient = patientData?.patient || {};
+    const authName = authData?.name || "";
+    const authEmail = authData?.email || "";
+
+    // Set profile data
+    const profile = {
+      name: patient.name || authName || "Patient",
+      email: patient.email || authEmail || "",
+      phone: patient.phone || "",
+      birthDate: patient.dateOfBirth
+        ? new Date(patient.dateOfBirth).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })
+        : "",
+      location: patient.address || "",
+    };
+    setProfileData(profile);
+    setFormData(profile);
+
+    // Set patient since date
+    if (patient.createdAt) {
+      const year = new Date(patient.createdAt).getFullYear();
+      setPatientSince(`Patient since ${year}`);
+    }
+
+    // Load treatment plans
+    const plans: TreatmentPlan[] = patientData?.plans || [];
+    setCurrentTreatments(
+      plans.filter((p: TreatmentPlan) => p.status !== "completed")
+    );
+    setCompletedTreatments(
+      plans
+        .filter((p: TreatmentPlan) => p.status === "completed")
+        .sort(
+          (a: TreatmentPlan, b: TreatmentPlan) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+    );
+  }, [patientData, isLoadingPatient, authData]);
 
   useEffect(() => {
     if (isEditOpen) {
@@ -76,6 +167,16 @@ export default function ProfileScreen() {
       .join("");
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -103,30 +204,42 @@ export default function ProfileScreen() {
                   </Text>
                 </View>
                 <View>
-                  <Text style={styles.profileName}>{profileData.name}</Text>
-                  <Text style={styles.profileSubtext}>Patient since 2023</Text>
+                  <Text style={styles.profileName}>
+                    {profileData.name || "Loading..."}
+                  </Text>
+                  <Text style={styles.profileSubtext}>
+                    {patientSince || ""}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.infoList}>
-                <View style={styles.infoRow}>
-                  <Text>✉️</Text>
-                  <Text style={styles.infoText}>{profileData.email}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Text>📞</Text>
-                  <Text style={styles.infoText}>{profileData.phone}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Text>📅</Text>
-                  <Text style={styles.infoText}>
-                    Date of Birth: {profileData.birthDate}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Text>📍</Text>
-                  <Text style={styles.infoText}>{profileData.location}</Text>
-                </View>
+                {profileData.email ? (
+                  <View style={styles.infoRow}>
+                    <Text>✉️</Text>
+                    <Text style={styles.infoText}>{profileData.email}</Text>
+                  </View>
+                ) : null}
+                {profileData.phone ? (
+                  <View style={styles.infoRow}>
+                    <Text>📞</Text>
+                    <Text style={styles.infoText}>{profileData.phone}</Text>
+                  </View>
+                ) : null}
+                {profileData.birthDate ? (
+                  <View style={styles.infoRow}>
+                    <Text>📅</Text>
+                    <Text style={styles.infoText}>
+                      Date of Birth: {profileData.birthDate}
+                    </Text>
+                  </View>
+                ) : null}
+                {profileData.location ? (
+                  <View style={styles.infoRow}>
+                    <Text>📍</Text>
+                    <Text style={styles.infoText}>{profileData.location}</Text>
+                  </View>
+                ) : null}
               </View>
 
               <TouchableOpacity
@@ -149,31 +262,53 @@ export default function ProfileScreen() {
             <View style={styles.cardContent}>
               <View style={styles.historySection}>
                 <Text style={styles.historyTitle}>Current Treatments</Text>
-                <View style={styles.historyList}>
-                  <Text style={styles.historyItem}>
-                    • Root Canal Treatment (In Progress)
-                  </Text>
-                  <Text style={styles.historyItem}>
-                    • Dental Implant (Healing Phase)
-                  </Text>
-                </View>
+                {currentTreatments.length === 0 ? (
+                  <Text style={styles.historyItem}>No active treatments</Text>
+                ) : (
+                  <View style={styles.historyList}>
+                    {currentTreatments.map((plan) => (
+                      <Text key={plan.id} style={styles.historyItem}>
+                        • {plan.title} ({plan.status})
+                      </Text>
+                    ))}
+                  </View>
+                )}
               </View>
 
               <View style={styles.historySection}>
                 <Text style={styles.historyTitle}>Completed Treatments</Text>
-                <View style={styles.historyList}>
+                {completedTreatments.length === 0 ? (
                   <Text style={styles.historyItem}>
-                    • Teeth Whitening (Sep 2025)
+                    No completed treatments
                   </Text>
-                  <Text style={styles.historyItem}>
-                    • Regular Cleaning (Aug 2025)
-                  </Text>
-                  <Text style={styles.historyItem}>
-                    • Cavity Filling (Jul 2025)
-                  </Text>
-                </View>
+                ) : (
+                  <View style={styles.historyList}>
+                    {completedTreatments.map((plan) => {
+                      const date = new Date(plan.createdAt);
+                      const month = date.toLocaleDateString("en-US", {
+                        month: "short",
+                      });
+                      const year = date.getFullYear();
+                      return (
+                        <Text key={plan.id} style={styles.historyItem}>
+                          • {plan.title} ({month} {year})
+                        </Text>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
             </View>
+          </View>
+
+          {/* Logout Button */}
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={handleLogout}
+            >
+              <Text style={styles.logoutButtonText}>🚪 Logout</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -520,5 +655,22 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "500",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  logoutButton: {
+    backgroundColor: "#FF3B30",
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoutButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

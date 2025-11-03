@@ -1,11 +1,26 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 
-  `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3001"}/api/auth/callback`;
-const SCOPE = "openid email profile";
+export async function GET(request: NextRequest) {
+  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+  const ADMIN_BASE_URL = process.env.ADMIN_BASE_URL;
+  const PATIENT_PORTAL_URL = process.env.PATIENT_PORTAL_URL;
 
-export async function GET(request: Request) {
+  if (!ADMIN_BASE_URL) {
+    return NextResponse.json(
+      { error: "ADMIN_BASE_URL environment variable is required" },
+      { status: 500 }
+    );
+  }
+  if (!PATIENT_PORTAL_URL) {
+    return NextResponse.json(
+      { error: "PATIENT_PORTAL_URL environment variable is required" },
+      { status: 500 }
+    );
+  }
+  const { searchParams } = new URL(request.url);
+  const role = searchParams.get("role") || "patient";
+  const redirectAfter = searchParams.get("redirect") || "";
+
   if (!GOOGLE_CLIENT_ID) {
     return NextResponse.json(
       { error: "Google OAuth not configured" },
@@ -13,22 +28,26 @@ export async function GET(request: Request) {
     );
   }
 
-  const { searchParams } = new URL(request.url);
-  const role = searchParams.get("role") || "doctor"; // 'doctor' or 'patient'
-  const redirectAfter = searchParams.get("redirect") || "/";
+  // Only allow patient role via OAuth (admin uses email/password)
+  if (role !== "patient") {
+    return NextResponse.redirect("/auth/login?error=oauth_patients_only");
+  }
 
-  const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    redirect_uri: GOOGLE_REDIRECT_URI,
-    response_type: "code",
-    scope: SCOPE,
-    access_type: "offline",
-    prompt: "consent",
-    state: JSON.stringify({ role, redirectAfter }),
-  });
+  // Always use admin base URL for callback (OAuth callback always goes to admin backend)
+  const redirectUri = `${ADMIN_BASE_URL}/api/auth/callback`;
 
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  // Store redirectAfter and role in state for callback
+  const state = Buffer.from(JSON.stringify({ role, redirectAfter })).toString(
+    "base64"
+  );
 
-  return NextResponse.redirect(authUrl);
+  const googleAuthUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  googleAuthUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
+  googleAuthUrl.searchParams.set("redirect_uri", redirectUri);
+  googleAuthUrl.searchParams.set("response_type", "code");
+  googleAuthUrl.searchParams.set("scope", "openid email profile");
+  googleAuthUrl.searchParams.set("state", state);
+  googleAuthUrl.searchParams.set("access_type", "online");
+
+  return NextResponse.redirect(googleAuthUrl.toString());
 }
-

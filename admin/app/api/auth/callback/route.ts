@@ -1,122 +1,171 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { OAuth2Client } from "google-auth-library";
 import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/jwt";
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 
-  `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3001"}/api/auth/callback`;
+export async function GET(request: NextRequest) {
+  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+  const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+  const ADMIN_BASE_URL = process.env.ADMIN_BASE_URL;
+  const PATIENT_PORTAL_URL = process.env.PATIENT_PORTAL_URL;
 
-export async function GET(request: Request) {
+  if (!ADMIN_BASE_URL) {
+    const fallbackUrl = PATIENT_PORTAL_URL || "http://localhost:8081";
+    return NextResponse.redirect(
+      `${fallbackUrl}?error=config_missing&msg=ADMIN_BASE_URL`
+    );
+  }
+  if (!PATIENT_PORTAL_URL) {
+    return NextResponse.json(
+      { error: "PATIENT_PORTAL_URL environment variable is required" },
+      { status: 500 }
+    );
+  }
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const state = searchParams.get("state");
+  const stateParam = searchParams.get("state");
 
-  if (!code || !state) {
-    return NextResponse.redirect("/auth/error?message=missing_params");
+  if (!code || !stateParam) {
+    return NextResponse.redirect(
+      `${PATIENT_PORTAL_URL}?error=oauth_missing_params`
+    );
   }
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    return NextResponse.redirect("/auth/error?message=not_configured");
+    return NextResponse.redirect(
+      `${PATIENT_PORTAL_URL}?error=oauth_not_configured`
+    );
+  }
+
+  let state: { role: string; redirectAfter?: string };
+  try {
+    state = JSON.parse(Buffer.from(stateParam, "base64").toString());
+  } catch {
+    return NextResponse.redirect(`${PATIENT_PORTAL_URL}?error=invalid_state`);
+  }
+
+  const { role, redirectAfter } = state;
+
+  // Only allow patient role via OAuth
+  if (role !== "patient") {
+    return NextResponse.redirect(
+      `${PATIENT_PORTAL_URL}?error=oauth_patients_only`
+    );
   }
 
   try {
-    const { role, redirectAfter } = JSON.parse(state);
-
-    // Exchange code for tokens
-    const oauth2Client = new OAuth2Client(
+    const client = new OAuth2Client(
       GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET,
-      GOOGLE_REDIRECT_URI
+      `${ADMIN_BASE_URL}/api/auth/callback`
     );
 
-    const { tokens } = await oauth2Client.getToken(code);
-    if (!tokens.id_token) {
-      throw new Error("No ID token received");
+    const { tokens } = await client.getToken(code);
+    const idToken = tokens.id_token;
+
+    if (!idToken) {
+      return NextResponse.redirect(`${PATIENT_PORTAL_URL}?error=no_id_token`);
     }
 
-    // Verify ID token and get user info
-    const ticket = await oauth2Client.verifyIdToken({
-      idToken: tokens.id_token,
+    const ticket = await client.verifyIdToken({
+      idToken,
       audience: GOOGLE_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
-    if (!payload) {
-      throw new Error("Invalid token payload");
+    if (!payload || !payload.email) {
+      return NextResponse.redirect(`${PATIENT_PORTAL_URL}?error=invalid_token`);
     }
 
-    const { sub: googleId, email, name, picture } = payload;
+    const { email, name, picture, sub: googleId } = payload;
 
-    if (!email || !googleId) {
-      throw new Error("Missing email or Google ID");
-    }
+    // Find or create patient
+    let patient = await prisma.patient.findUnique({
+      where: { email },
+    });
 
-    // Find or create user
-    let userId: string;
-    if (role === "doctor") {
-      const doctor = await prisma.doctor.upsert({
-        where: { email },
-        update: {
-          googleId,
-          picture: picture || undefined,
-          name: name || email.split("@")[0],
-        },
-        create: {
+    if (!patient) {
+      patient = await prisma.patient.create({
+        data: {
           email,
-          googleId,
-          picture: picture || undefined,
           name: name || email.split("@")[0],
+          googleId,
+          picture: picture || null,
         },
       });
-      userId = doctor.id;
     } else {
-      const patient = await prisma.patient.upsert({
-        where: { email },
-        update: {
-          googleId,
-          picture: picture || undefined,
-          name: name || email.split("@")[0],
-        },
-        create: {
-          email,
-          googleId,
-          picture: picture || undefined,
-          name: name || email.split("@")[0],
-        },
-      });
-      userId = patient.id;
+      // Update patient if googleId or picture changed
+      if (googleId && patient.googleId !== googleId) {
+        patient = await prisma.patient.update({
+          where: { id: patient.id },
+          data: { googleId, picture: picture || patient.picture },
+        });
+      }
     }
 
-    // Generate JWT
+    // Generate JWT token for patient
     const token = await signToken({
-      userId,
-      email,
-      role: role as "doctor" | "patient",
-      googleId,
+      userId: patient.id,
+      email: patient.email,
+      role: "patient",
+      googleId: patient.googleId || undefined,
     });
 
-    // Redirect with token
-    const redirectUrl = new URL(redirectAfter || "/", request.url.split("/api")[0]);
-    redirectUrl.searchParams.set("token", token);
+    // Determine redirect URL - always redirect to patient portal for patients
+    let redirectUrl = PATIENT_PORTAL_URL!;
 
+    // If redirectAfter is provided and is a valid patient portal URL, use it
+    if (redirectAfter) {
+      try {
+        const redirectUrlObj = new URL(redirectAfter);
+        const patientPortalUrlObj = new URL(PATIENT_PORTAL_URL!);
+        // Only use redirectAfter if it's from the same origin as patient portal
+        if (redirectUrlObj.origin === patientPortalUrlObj.origin) {
+          redirectUrl = redirectAfter;
+        }
+      } catch (e) {
+        // Invalid URL, use default patient portal
+        console.warn("Invalid redirectAfter URL:", redirectAfter);
+      }
+    }
+
+    // Check if redirect URL is cross-domain (different origin)
+    const redirectOrigin = redirectUrl ? new URL(redirectUrl).origin : null;
+    const adminOrigin = new URL(ADMIN_BASE_URL!).origin;
+    const isCrossDomain = redirectOrigin !== adminOrigin;
+
+    // Create response
     const response = NextResponse.redirect(redirectUrl);
-    
-    // Also set HTTP-only cookie for security
-    response.cookies.set("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    });
 
-    return response;
+    if (isCrossDomain) {
+      // Cross-domain: add token to URL as fallback (will be saved to localStorage)
+      const url = new URL(redirectUrl);
+      url.searchParams.set("_auth_token", token);
+      return NextResponse.redirect(url.toString());
+    } else {
+      // Same-domain: set HTTP-only cookie
+      response.cookies.set("auth_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60, // 7 days
+        path: "/",
+      });
+      return response;
+    }
   } catch (error: any) {
     console.error("OAuth callback error:", error);
+    console.error("Error details:", {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name,
+    });
+    // Ensure PATIENT_PORTAL_URL is set before redirecting
+    const errorRedirect = PATIENT_PORTAL_URL || "http://localhost:8081";
     return NextResponse.redirect(
-      `/auth/error?message=${encodeURIComponent(error.message || "unknown_error")}`
+      `${errorRedirect}?error=oauth_failed&details=${encodeURIComponent(
+        error?.message || "Unknown error"
+      )}`
     );
   }
 }
-

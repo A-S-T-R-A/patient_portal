@@ -1,10 +1,11 @@
+import { NextRequest } from "next/server";
 import { subscribe } from "@/lib/events";
 
 // Hook Prisma writes to emit events (simple example)
 // In production, use DB triggers or queues
 // Not implemented here to avoid overhead; admin and portal currently poll via actions
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId") || undefined;
   const doctorId = searchParams.get("doctorId") || undefined;
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
   });
 }
 
-export async function OPTIONS(req: Request) {
+export async function OPTIONS(req: NextRequest) {
   return new Response(null, {
     status: 204,
     headers: {

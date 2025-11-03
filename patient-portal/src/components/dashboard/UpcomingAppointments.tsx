@@ -71,49 +71,89 @@ export function UpcomingAppointments() {
       </View>
 
       <View style={styles.content}>
-        {appointments.map((appointment) => (
-          <View key={appointment.id} style={styles.appointmentCard}>
-            <View style={styles.appointmentContent}>
-              <Text style={styles.appointmentTitle}>{appointment.title}</Text>
-              {appointment.location ? (
-                <Text style={styles.appointmentDoctor}>
-                  {appointment.location}
-                </Text>
-              ) : null}
+        {appointments.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No upcoming appointments</Text>
+            <Text style={styles.emptySubtext}>
+              Your scheduled appointments will appear here
+            </Text>
+          </View>
+        ) : (
+          appointments.map((appointment) => (
+            <View key={appointment.id} style={styles.appointmentCard}>
+              <View style={styles.appointmentContent}>
+                <Text style={styles.appointmentTitle}>{appointment.title}</Text>
+                {appointment.location ? (
+                  <Text style={styles.appointmentDoctor}>
+                    {appointment.location}
+                  </Text>
+                ) : null}
 
-              <View style={styles.appointmentDetails}>
-                <View style={styles.detailRow}>
-                  <Text style={{ fontSize: 14 }}>📅</Text>
-                  <Text style={styles.detailText}>
-                    {new Date(appointment.datetime).toLocaleDateString()}
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={{ fontSize: 14 }}>⏰</Text>
-                  <Text style={styles.detailText}>
-                    {new Date(appointment.datetime).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={{ fontSize: 14 }}>📍</Text>
-                  <Text style={styles.detailText}>
-                    {appointment.location || "Clinic"}
-                  </Text>
+                <View style={styles.appointmentDetails}>
+                  <View style={styles.detailRow}>
+                    <Text style={{ fontSize: 14 }}>📅</Text>
+                    <Text style={styles.detailText}>
+                      {new Date(appointment.datetime).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={{ fontSize: 14 }}>⏰</Text>
+                    <Text style={styles.detailText}>
+                      {new Date(appointment.datetime).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={{ fontSize: 14 }}>📍</Text>
+                    <Text style={styles.detailText}>
+                      {appointment.location || "Clinic"}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <TouchableOpacity
-              style={styles.rescheduleButton}
-              onPress={() => handleOpenReschedule(appointment)}
-            >
-              <Text style={styles.rescheduleButtonText}>Reschedule</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={styles.rescheduleButton}
+                  onPress={() => handleOpenReschedule(appointment)}
+                >
+                  <Text style={styles.rescheduleButtonText}>Reschedule</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={async () => {
+                    if (
+                      !confirm(
+                        "Are you sure you want to cancel this appointment?"
+                      )
+                    )
+                      return;
+                    try {
+                      const res = await fetch(
+                        `${API_BASE}/appointments/${appointment.id}`,
+                        {
+                          method: "DELETE",
+                          credentials: "include",
+                        }
+                      );
+                      if (res.ok) {
+                        // Appointment will be removed via socket update
+                      } else {
+                        alert("Failed to cancel appointment");
+                      }
+                    } catch (error) {
+                      alert("Failed to cancel appointment");
+                    }
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
       </View>
 
       <Modal
@@ -147,6 +187,8 @@ export function UpcomingAppointments() {
                       borderRadius: "6px",
                       backgroundColor: "#fff",
                       fontFamily: "inherit",
+                      boxSizing: "border-box",
+                      maxWidth: "100%",
                     }}
                   />
                 </View>
@@ -264,6 +306,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
   },
+  emptyState: {
+    padding: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 12,
+    color: "#999",
+  },
   rescheduleButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -275,6 +331,23 @@ const styles = StyleSheet.create({
   rescheduleButtonText: {
     fontSize: 14,
     color: "#007AFF",
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  cancelButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: "#FF3B30",
+    backgroundColor: "#fff",
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FF3B30",
   },
   modalOverlay: {
     flex: 1,
@@ -288,6 +361,7 @@ const styles = StyleSheet.create({
     padding: 24,
     width: "90%",
     maxWidth: 400,
+    overflow: "hidden",
   },
   modalTitle: {
     fontSize: 20,
@@ -311,6 +385,7 @@ const styles = StyleSheet.create({
   },
   dateTimeInputWrapper: {
     width: "100%",
+    overflow: "hidden",
   },
   dateTimeInput: {
     borderWidth: 1,
@@ -340,10 +415,13 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     backgroundColor: "#F5F5F5",
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
   },
   cancelButtonText: {
     color: "#000",
     fontSize: 14,
+    fontWeight: "500",
   },
   saveButton: {
     backgroundColor: "#007AFF",
