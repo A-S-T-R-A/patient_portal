@@ -11,8 +11,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Allow access to auth pages - don't check auth
-    if (pathname?.startsWith("/auth")) {
+    // Allow access to auth pages and privacy page - don't check auth
+    if (pathname?.startsWith("/auth") || pathname === "/privacy") {
       setIsAuthenticated(true);
       return;
     }
@@ -24,8 +24,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     if (error || !authData) {
       setIsAuthenticated(false);
-      // Don't redirect if already on auth page
-      if (!pathname?.startsWith("/auth")) {
+      // Don't redirect if already on auth or privacy page
+      if (!pathname?.startsWith("/auth") && pathname !== "/privacy") {
         router.replace(
           "/auth/login?redirect=" + encodeURIComponent(pathname || "/")
         );
@@ -38,8 +38,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       setIsAuthenticated(true);
     } else {
       setIsAuthenticated(false);
-      // Don't redirect if already on auth page
-      if (!pathname?.startsWith("/auth")) {
+      // Don't redirect if already on auth or privacy page
+      if (!pathname?.startsWith("/auth") && pathname !== "/privacy") {
         router.replace("/auth/login?error=patient_not_allowed");
       }
     }
@@ -53,7 +53,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated && !pathname?.startsWith("/auth")) {
+  if (
+    !isAuthenticated &&
+    !pathname?.startsWith("/auth") &&
+    pathname !== "/privacy"
+  ) {
     return null; // Will redirect
   }
 

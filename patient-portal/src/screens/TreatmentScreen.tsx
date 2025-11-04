@@ -9,6 +9,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE, resolvePatientId } from "../lib/api";
 import { useAuth } from "../lib/queries";
+import { Header } from "../components/Header";
+import { colors } from "../lib/colors";
 
 type TreatmentPlan = {
   id: string;
@@ -76,12 +78,12 @@ export default function TreatmentScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Header title="Treatment Plans" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Treatment Progress</Text>
           <Text style={styles.subtitle}>
             Track your dental treatment journey and progress
           </Text>
@@ -210,7 +212,7 @@ export default function TreatmentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.primaryWhite,
   },
   loadingContainer: {
     flex: 1,
@@ -273,16 +275,11 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: "#000",
-    marginBottom: 8,
+    marginTop: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: colors.textSecondary,
   },
   treatmentsList: {
     gap: 20,

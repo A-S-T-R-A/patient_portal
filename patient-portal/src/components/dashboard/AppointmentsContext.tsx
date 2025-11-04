@@ -54,7 +54,7 @@ export function AppointmentsProvider({ children }: { children: ReactNode }) {
 
       // Setup Socket.IO connection for real-time updates
       if (!wsRef.current) {
-        const socket: any = connectSocket({ patientId });
+        const socket: any = await connectSocket({ patientId });
         wsRef.current = socket;
 
         // Listen for new appointments

@@ -12,7 +12,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
-import { API_BASE, connectSocket, resolvePatientId } from "../lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { API_BASE, connectSocket } from "../lib/api";
+import { storageSync } from "../lib/storage";
+import { colors } from "../lib/colors";
+import { useMessages, usePatientId } from "../lib/queries";
+import { Header } from "../components/Header";
 
 const screenWidth = Dimensions.get("window").width;
 const isMobile = screenWidth < 768;
@@ -21,7 +26,9 @@ export default function MessagesScreen() {
   const messagesEndRef = useRef<ScrollView>(null);
   const wsRef = useRef<any | null>(null);
   const selectedConversationRef = useRef<any>(null);
-  const [patientId, setPatientId] = useState<string | null>(null);
+  const patientId = usePatientId();
+  const queryClient = useQueryClient();
+  const { data: messagesData, isLoading: isLoadingMessages } = useMessages(patientId);
   const [conversations, setConversations] = useState<any[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [showChat, setShowChat] = useState(false);
@@ -35,27 +42,20 @@ export default function MessagesScreen() {
     selectedConversationRef.current = selectedConversation;
   }, [selectedConversation]);
 
+  // Load conversations from cached messages data
+  // This effect runs whenever messagesData changes (including when new messages arrive via socket)
   useEffect(() => {
-    // Resolve patient once on mount and load conversations
+    if (!patientId || !messagesData) return;
+
+    console.log("[MessagesScreen] Updating conversations from messagesData, count:", messagesData.length);
+
+    // Also fetch patient data for appointments
     (async () => {
-      const id = await resolvePatientId();
-      setPatientId(id);
-      if (!id) return;
-
       try {
-        // Load patient data and messages
-        const [messagesRes, patientRes] = await Promise.all([
-          fetch(`${API_BASE}/patients/${id}/messages`, {
-            credentials: "include",
-          }),
-          fetch(`${API_BASE}/patients/${id}`, {
-            credentials: "include",
-          }),
-        ]);
-
-        const messagesData = await messagesRes.json();
+        const patientRes = await fetch(`${API_BASE}/patients/${patientId}`, {
+          credentials: "include",
+        });
         const patientData = await patientRes.json();
-        const msgs = messagesData.messages || [];
         const appointments = patientData.appointments || [];
 
         // Check if there are any scheduled (future) appointments
@@ -65,14 +65,14 @@ export default function MessagesScreen() {
         );
 
         // Check if there are any messages from a doctor
-        const hasDoctorMessages = msgs.some((m: any) => m.sender === "doctor");
+        const hasDoctorMessages = messagesData.some((m: any) => m.sender === "doctor");
 
         // Show conversation if there are doctor messages OR scheduled appointments
         if (hasDoctorMessages || hasScheduledAppointment) {
           let doctorName = "Your Doctor";
 
           // Get last message overall (not just from doctor)
-          const lastMsg = msgs.sort(
+          const lastMsg = [...messagesData].sort(
             (a: any, b: any) =>
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )[0];
@@ -89,7 +89,10 @@ export default function MessagesScreen() {
                     minute: "2-digit",
                   })
                 : "",
-              unread: false,
+              unread: messagesData.some((m: any) => 
+                m.sender === "doctor" && 
+                (!selectedConversation || selectedConversation.id !== 1)
+              ),
             },
           ]);
         } else {
@@ -97,46 +100,40 @@ export default function MessagesScreen() {
           setConversations([]);
         }
 
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(
-            "pp_lastReadAt",
-            new Date().toISOString()
-          );
-        }
+        storageSync.setItem("pp_lastReadAt", new Date().toISOString());
       } catch (e) {
         console.error("Failed to load conversations:", e);
         setConversations([]);
       }
     })();
-  }, []);
+  }, [patientId, messagesData, selectedConversation]);
 
+  // Load messages when conversation opens - use cached data
+  // Also update when messagesData changes (new messages arrive via socket)
   useEffect(() => {
-    // Load messages when conversation opens
-    (async () => {
-      if (!selectedConversation || !patientId) return;
-      const res = await fetch(`${API_BASE}/patients/${patientId}/messages`);
-      const data = await res.json();
-      const msgs = (data.messages || []).map((m: any) => ({
-        id: m.id,
-        sender: m.sender === "doctor" ? selectedConversation.sender : "You",
-        content: m.content,
-        time: new Date(m.createdAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        isOwn: m.sender !== "doctor",
-      }));
-      setMessages(msgs);
-      try {
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(
-            "pp_lastReadAt",
-            new Date().toISOString()
-          );
-        }
-      } catch {}
-    })();
-  }, [selectedConversation, patientId]);
+    if (!selectedConversation || !patientId || !messagesData) return;
+    
+    // Use cached messages data instead of fetching
+    // Sort by createdAt to ensure correct order
+    const sortedMessages = [...messagesData].sort(
+      (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+    
+    const msgs = sortedMessages.map((m: any) => ({
+      id: m.id,
+      sender: m.sender === "doctor" ? selectedConversation.sender : "You",
+      content: m.content,
+      time: new Date(m.createdAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      isOwn: m.sender !== "doctor",
+    }));
+    setMessages(msgs);
+    try {
+      storageSync.setItem("pp_lastReadAt", new Date().toISOString());
+    } catch {}
+  }, [selectedConversation, patientId, messagesData]);
 
   useEffect(() => {
     setTimeout(() => {
@@ -146,44 +143,105 @@ export default function MessagesScreen() {
 
   // Single Socket.IO connection
   useEffect(() => {
-    if (!patientId) return;
+    if (!patientId) {
+      console.log("[MessagesScreen] No patientId, skipping socket setup");
+      return;
+    }
     let mounted = true;
 
+    console.log("[MessagesScreen] Setting up socket connection for patientId:", patientId);
+
     // Get or create socket connection
-    let socket: any = wsRef.current;
+    (async () => {
+      let socket: any = wsRef.current;
 
-    // If socket doesn't exist or is disconnected, create/reuse singleton
-    if (!socket || !socket.connected) {
-      socket = connectSocket({ patientId });
-      wsRef.current = socket;
-    }
-
-    // Setup message listeners (remove old ones first to prevent duplicates)
-    const messagesClearedHandler = () => {
-      if (mounted) {
-        setMessages([]);
-        setConversations([]);
-        setSelectedConversation(null);
+      // If socket doesn't exist or is disconnected, create/reuse singleton
+      if (!socket || !socket.connected) {
+        console.log("[MessagesScreen] Socket not connected, creating new connection");
+        socket = await connectSocket({ patientId });
+        wsRef.current = socket;
+      
+        // Wait for connection if not connected
+        if (!socket.connected) {
+          console.log("[MessagesScreen] Waiting for socket connection...");
+          socket.once("connect", () => {
+            console.log("[MessagesScreen] Socket connected, patientId:", patientId);
+          });
+        } else {
+          console.log("[MessagesScreen] Socket already connected");
+        }
+      } else {
+        console.log("[MessagesScreen] Reusing existing socket connection");
       }
-    };
 
-    const messageNewHandler = ({ message: m }: any) => {
+      // Setup message listeners (remove old ones first to prevent duplicates)
+      const messagesClearedHandler = () => {
+        if (mounted) {
+          // Clear React Query cache
+          if (patientId) {
+            queryClient.setQueryData(["messages", patientId], []);
+          }
+          setMessages([]);
+          setConversations([]);
+          setSelectedConversation(null);
+        }
+      };
+
+      const messageNewHandler = ({ message: m }: any) => {
       // Only process messages for this patient
       if (!mounted || !m || (m.patientId && m.patientId !== patientId)) return;
-      const rendered = {
-        id: m.id,
-        sender:
-          m.sender === "doctor"
-            ? selectedConversationRef.current?.sender || "Doctor"
-            : "You",
-        content: m.content,
-        time: new Date(m.createdAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        isOwn: m.sender !== "doctor",
-      };
-      setMessages((prev) => [...prev, rendered]);
+      
+      console.log("[MessagesScreen] New message received via socket:", m);
+      
+      // Update React Query cache with new message
+      // This will trigger the useEffect that watches messagesData
+      if (patientId) {
+        queryClient.setQueryData(
+          ["messages", patientId],
+          (oldData: any[] | undefined) => {
+            if (!oldData) {
+              console.log("[MessagesScreen] No existing messages, creating new array with message:", m.id);
+              return [m];
+            }
+            // Check if message already exists (avoid duplicates)
+            const exists = oldData.some((msg) => msg.id === m.id);
+            if (exists) {
+              console.log("[MessagesScreen] Message already exists in cache, skipping:", m.id);
+              return oldData;
+            }
+            console.log("[MessagesScreen] Adding new message to cache:", m.id, "Total messages:", oldData.length + 1);
+            return [...oldData, m];
+          }
+        );
+      }
+      
+      // Also update local messages state immediately for instant UI update
+      // This will be synced by useEffect watching messagesData, but immediate update is better UX
+      if (selectedConversationRef.current) {
+        const rendered = {
+          id: m.id,
+          sender:
+            m.sender === "doctor"
+              ? selectedConversationRef.current?.sender || "Doctor"
+              : "You",
+          content: m.content,
+          time: new Date(m.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          isOwn: m.sender !== "doctor",
+        };
+        setMessages((prev) => {
+          // Check if message already exists to avoid duplicates
+          const exists = prev.some((msg) => msg.id === m.id);
+          if (exists) {
+            console.log("[MessagesScreen] Message already in local state, skipping:", m.id);
+            return prev;
+          }
+          console.log("[MessagesScreen] Adding message to local state:", m.id);
+          return [...prev, rendered];
+        });
+      }
 
       // If it's a message from doctor and we don't have a conversation yet, create one
       if (m.sender === "doctor") {
@@ -239,41 +297,12 @@ export default function MessagesScreen() {
             }),
             unread: false,
           });
-          // Load messages for this conversation
-          (async () => {
-            try {
-              const res = await fetch(
-                `${API_BASE}/patients/${patientId}/messages`,
-                {
-                  credentials: "include",
-                }
-              );
-              const data = await res.json();
-              const msgs = data.messages || [];
-              const rendered = msgs.map((msg: any) => ({
-                id: msg.id,
-                content: msg.content,
-                time: new Date(msg.createdAt).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }),
-                isOwn: msg.sender !== "doctor",
-              }));
-              setMessages(rendered);
-            } catch (e) {
-              console.error("Failed to load messages:", e);
-            }
-          })();
+          // Messages will be loaded from cache via useEffect that watches messagesData
         }
       }
 
       try {
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(
-            "pp_lastReadAt",
-            new Date().toISOString()
-          );
-        }
+        storageSync.setItem("pp_lastReadAt", new Date().toISOString());
       } catch {}
 
       // Show toast notification (already have native notification in App.tsx)
@@ -287,23 +316,22 @@ export default function MessagesScreen() {
       }
     };
 
-    // Remove old listeners before adding new ones
-    socket.off("messages:cleared");
-    socket.off("message:new");
+      // Remove old listeners before adding new ones
+      // IMPORTANT: Only remove our specific handlers, not all handlers!
+      // The global handler in App.tsx must remain active
+      socket.off("messages:cleared", messagesClearedHandler);
+      socket.off("message:new", messageNewHandler);
 
-    // Add new listeners
-    socket.on("messages:cleared", messagesClearedHandler);
-    socket.on("message:new", messageNewHandler);
+      // Add new listeners
+      socket.on("messages:cleared", messagesClearedHandler);
+      socket.on("message:new", messageNewHandler);
+      
+      console.log("[MessagesScreen] Socket listeners setup complete, message:new listeners:", socket.listeners("message:new").length);
+    })();
 
     return () => {
       mounted = false;
-      // Only remove listeners, don't disconnect socket (it's singleton)
-      if (socket) {
-        socket.off("messages:cleared", messagesClearedHandler);
-        socket.off("message:new", messageNewHandler);
-      }
-      // Only clear ref if we're sure this component is unmounting
-      // Don't clear if patientId changes - keep socket for next render
+      // Cleanup happens automatically when component unmounts
     };
   }, [patientId]);
 
@@ -315,7 +343,7 @@ export default function MessagesScreen() {
 
     // If socket doesn't exist or is disconnected, reconnect
     if (!socket || !socket.connected) {
-      socket = connectSocket({ patientId });
+      socket = await connectSocket({ patientId });
       wsRef.current = socket;
 
       // Wait for connection
@@ -377,9 +405,7 @@ export default function MessagesScreen() {
     );
 
     try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("pp_lastReadAt", new Date().toISOString());
-      }
+      storageSync.setItem("pp_lastReadAt", new Date().toISOString());
     } catch {}
   };
 
@@ -503,7 +529,7 @@ export default function MessagesScreen() {
                 style={styles.sendButton}
                 onPress={handleSendMessage}
               >
-                <Text style={{ color: "#fff", fontSize: 16 }}>➤</Text>
+                <Text style={{ color: colors.primaryWhite, fontSize: 16 }}>➤</Text>
               </TouchableOpacity>
             </View>
           </SafeAreaView>
@@ -518,8 +544,8 @@ export default function MessagesScreen() {
         keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
       >
         <SafeAreaView style={styles.container}>
+          <Header title="Messages" />
           <View style={styles.header}>
-            <Text style={styles.title}>Messages</Text>
             <Text style={styles.subtitle}>
               Communicate securely with your dental care team
             </Text>
@@ -571,24 +597,23 @@ export default function MessagesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Header title="Messages" />
       <View style={styles.header}>
-        <Text style={styles.title}>Messages</Text>
         <Text style={styles.subtitle}>
           Communicate securely with your dental care team
         </Text>
       </View>
-
       <View style={styles.content}>
         {!isConversationsCollapsed && (
           <View style={styles.conversationsList}>
             <View style={styles.conversationsHeader}>
-              <Text style={{ fontSize: 20, color: "#007AFF" }}>💬</Text>
+              <Text style={{ fontSize: 20, color: colors.textPrimary }}>💬</Text>
               <Text style={styles.conversationsTitle}>Conversations</Text>
               <TouchableOpacity
                 style={styles.collapseButton}
                 onPress={() => setIsConversationsCollapsed(true)}
               >
-                <Text style={{ fontSize: 18, color: "#666" }}>◀</Text>
+                <Text style={{ fontSize: 18, color: colors.textSecondary }}>◀</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.conversationsScroll}>
@@ -645,7 +670,7 @@ export default function MessagesScreen() {
             style={styles.expandButton}
             onPress={() => setIsConversationsCollapsed(false)}
           >
-            <Text style={{ fontSize: 18, color: "#666" }}>▶</Text>
+            <Text style={{ fontSize: 18, color: colors.textSecondary }}>▶</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -733,13 +758,18 @@ export default function MessagesScreen() {
                 style={styles.sendButton}
                 onPress={handleSendMessage}
               >
-                <Text style={{ color: "#fff", fontSize: 16 }}>➤</Text>
+                <Text style={{ color: colors.primaryWhite, fontSize: 16 }}>➤</Text>
               </TouchableOpacity>
             </View>
           </View>
+        ) : isLoadingMessages && !messagesData ? (
+          <View style={styles.emptyChat}>
+            <Text style={{ fontSize: 48, color: colors.greyscale300 }}>⏳</Text>
+            <Text style={styles.emptyChatText}>Loading messages...</Text>
+          </View>
         ) : (
           <View style={styles.emptyChat}>
-            <Text style={{ fontSize: 48, color: "#E5E5E5" }}>💬</Text>
+            <Text style={{ fontSize: 48, color: colors.greyscale300 }}>💬</Text>
             <Text style={styles.emptyChatText}>Select a conversation</Text>
           </View>
         )}
@@ -751,23 +781,16 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.primaryWhite,
   },
   header: {
     padding: 24,
+    paddingTop: 16,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E5E5",
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: "#000",
-    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: colors.textSecondary,
   },
   content: {
     flex: 1,
@@ -777,7 +800,7 @@ const styles = StyleSheet.create({
     width: 350,
     borderRightWidth: 1,
     borderRightColor: "#E5E5E5",
-    backgroundColor: "#fff",
+    backgroundColor: colors.primaryWhite,
   },
   conversationsHeader: {
     flexDirection: "row",
@@ -797,12 +820,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRightWidth: 1,
     borderRightColor: "#E5E5E5",
-    backgroundColor: "#F9F9F9",
+    backgroundColor: colors.surface,
   },
   conversationsTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#000",
+    color: colors.textPrimary,
   },
   conversationsScroll: {
     flex: 1,
@@ -815,20 +838,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   conversationItemActive: {
-    backgroundColor: "#F5F5F5",
+    backgroundColor: colors.surface,
   },
   conversationAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#007AFF",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   conversationAvatarText: {
     fontSize: 14,
     fontWeight: "bold",
-    color: "#fff",
+    color: colors.primaryWhite,
   },
   conversationContent: {
     flex: 1,
@@ -842,22 +865,22 @@ const styles = StyleSheet.create({
   conversationSender: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#000",
+    color: colors.textPrimary,
   },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#007AFF",
+    backgroundColor: colors.primary,
   },
   conversationRole: {
     fontSize: 12,
-    color: "#666",
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   conversationMessage: {
     fontSize: 12,
-    color: "#666",
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   conversationTime: {
@@ -884,23 +907,23 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#007AFF",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   chatAvatarText: {
     fontSize: 14,
     fontWeight: "bold",
-    color: "#fff",
+    color: colors.primaryWhite,
   },
   chatHeaderName: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#000",
+    color: colors.textPrimary,
   },
   chatHeaderRole: {
     fontSize: 12,
-    color: "#666",
+    color: colors.textSecondary,
   },
   messagesList: {
     flex: 1,
@@ -924,20 +947,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   messageBubbleOwn: {
-    backgroundColor: "#007AFF",
+    backgroundColor: colors.primary,
   },
   messageBubbleOther: {
-    backgroundColor: "#F5F5F5",
+    backgroundColor: colors.surface,
   },
   messageText: {
     fontSize: 14,
     marginBottom: 4,
   },
   messageTextOwn: {
-    color: "#fff",
+    color: colors.primaryWhite,
   },
   messageTextOther: {
-    color: "#000",
+    color: colors.textPrimary,
   },
   messageTime: {
     fontSize: 10,
@@ -946,7 +969,7 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.7)",
   },
   messageTimeOther: {
-    color: "#666",
+    color: colors.textSecondary,
   },
   inputContainer: {
     flexDirection: "row",
@@ -959,7 +982,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: colors.greyscale200,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -970,7 +993,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#007AFF",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -986,19 +1009,19 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 20,
-    color: "#000",
+    color: colors.textPrimary,
   },
   collapseButtonText: {
     fontSize: 20,
-    color: "#666",
+    color: colors.textSecondary,
   },
   expandButtonText: {
     fontSize: 20,
-    color: "#666",
+    color: colors.textSecondary,
   },
   sendButtonText: {
     fontSize: 20,
-    color: "#fff",
+    color: colors.primaryWhite,
   },
   emptyConversations: {
     padding: 24,
@@ -1007,7 +1030,7 @@ const styles = StyleSheet.create({
   },
   emptyConversationsText: {
     fontSize: 16,
-    color: "#666",
+    color: colors.textSecondary,
     marginBottom: 4,
     textAlign: "center",
   },

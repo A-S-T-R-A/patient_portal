@@ -12,11 +12,11 @@ export interface JWTPayload {
   [key: string]: string | undefined; // Index signature for jose compatibility
 }
 
-export async function signToken(payload: JWTPayload): Promise<string> {
+export async function signToken(payload: JWTPayload, expiresIn: string = "7d"): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(expiresIn)
     .sign(SECRET);
 }
 

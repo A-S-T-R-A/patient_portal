@@ -53,6 +53,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Detect if request is from mobile browser (iOS/Android)
+  // We need to redirect to deep link so app can open
+  const userAgent = request.headers.get("user-agent") || "";
+  const isMobileBrowser = /iPhone|iPad|iPod|Android/i.test(userAgent);
+
   try {
     const client = new OAuth2Client(
       GOOGLE_CLIENT_ID,
@@ -111,22 +116,43 @@ export async function GET(request: NextRequest) {
       googleId: patient.googleId || undefined,
     });
 
-    // Determine redirect URL - always redirect to patient portal for patients
+    // Determine redirect URL - prioritize redirectAfter (preserves localhost)
     let redirectUrl = PATIENT_PORTAL_URL!;
 
-    // If redirectAfter is provided and is a valid patient portal URL, use it
+    // If redirectAfter is provided, use it (especially for localhost)
     if (redirectAfter) {
       try {
         const redirectUrlObj = new URL(redirectAfter);
-        const patientPortalUrlObj = new URL(PATIENT_PORTAL_URL!);
-        // Only use redirectAfter if it's from the same origin as patient portal
-        if (redirectUrlObj.origin === patientPortalUrlObj.origin) {
+
+        // Always use localhost if that's where user came from
+        if (
+          redirectUrlObj.hostname === "localhost" ||
+          redirectUrlObj.hostname === "127.0.0.1" ||
+          redirectUrlObj.hostname.includes("localhost")
+        ) {
           redirectUrl = redirectAfter;
+        } else {
+          // For production URLs, only use redirectAfter if it's from the same origin as patient portal
+          // This prevents redirecting to arbitrary URLs
+          const patientPortalUrlObj = new URL(PATIENT_PORTAL_URL!);
+          if (redirectUrlObj.origin === patientPortalUrlObj.origin) {
+            redirectUrl = redirectAfter;
+          }
         }
       } catch (e) {
         // Invalid URL, use default patient portal
-        console.warn("Invalid redirectAfter URL:", redirectAfter);
+        console.warn("Invalid redirectAfter URL:", redirectAfter, e);
       }
+    }
+
+    // For mobile browsers/apps using WebBrowser, redirect to deep link
+    // WebBrowser.openAuthSessionAsync expects a redirect to the deep link scheme
+    if (isMobileBrowser) {
+      // Deep link for app - WebBrowser will handle this automatically
+      const deepLink = `patient-portal://auth?token=${encodeURIComponent(
+        token
+      )}`;
+      return NextResponse.redirect(deepLink);
     }
 
     // Check if redirect URL is cross-domain (different origin)

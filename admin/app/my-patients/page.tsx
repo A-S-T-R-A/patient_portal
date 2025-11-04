@@ -1,8 +1,12 @@
 "use client";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { API_BASE, connectEvents } from "@/lib/api";
 import { useSearchParams } from "next/navigation";
+import {
+  useDoctorPatients,
+  useInvalidateAdminQueries,
+} from "@/lib/admin-queries";
 
 type Patient = {
   id: string;
@@ -17,24 +21,19 @@ function MyPatientsPageInner() {
   const searchParams = useSearchParams();
   const doctorIdParam = searchParams.get("doctorId") || undefined;
   const doctorId = doctorIdParam || "seed"; // mock doctor
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading: loading } = useDoctorPatients(doctorId);
+  const patients = data?.patients ?? [];
+  const invalidate = useInvalidateAdminQueries();
 
   useEffect(() => {
-    fetch(`${API_BASE}/doctors/${doctorId}/patients`)
-      .then((r) => r.json())
-      .then((data) => setPatients(data.patients ?? []))
-      .finally(() => setLoading(false));
     // realtime subscribe for doctor
     const es = connectEvents({ doctorId });
     es.addEventListener("doctor.assign", () => {
-      // pull fresh list on assign
-      fetch(`${API_BASE}/doctors/${doctorId}/patients`)
-        .then((r) => r.json())
-        .then((data) => setPatients(data.patients ?? []));
+      // Invalidate cache to refetch
+      invalidate.invalidateDoctorPatients(doctorId);
     });
     return () => es.close();
-  }, [doctorId]);
+  }, [doctorId, invalidate]);
 
   return (
     <div>

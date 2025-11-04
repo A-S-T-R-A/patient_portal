@@ -56,9 +56,16 @@ export function Sidebar() {
   return (
     <aside className="hidden md:block w-64 border-r bg-white/80 backdrop-blur p-5 flex flex-col h-screen">
       <div className="flex-1">
-        <div className="mb-6">
-          <div className="text-xl font-semibold text-slate-900">Admin</div>
-          <div className="text-xs text-slate-500">Control panel</div>
+        <div className="mb-6 flex items-center gap-3">
+          <img
+            src="/teeth-logo.webp"
+            alt="Logo"
+            className="w-10 h-10 object-contain"
+          />
+          <div>
+            <div className="text-xl font-semibold text-slate-900">Admin</div>
+            <div className="text-xs text-slate-500">Control panel</div>
+          </div>
         </div>
         <nav className="space-y-1 text-sm">
           <Link

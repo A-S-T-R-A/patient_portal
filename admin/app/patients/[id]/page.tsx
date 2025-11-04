@@ -1,6 +1,13 @@
 "use client";
+
+import {
+  usePatient,
+  useTreatmentPlans,
+  useInvalidateAdminQueries,
+} from "@/lib/admin-queries";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { API_BASE, connectSocket } from "@/lib/api";
+import { API_BASE } from "@/lib/api";
+import { getSocket } from "@/lib/socket";
 
 type Appointment = {
   id: string;
@@ -22,15 +29,15 @@ import * as React from "react";
 
 function TreatmentPlansSection({
   patientId,
-  plans,
   appointments,
-  onPlansUpdate,
 }: {
   patientId: string;
-  plans: Plan[];
   appointments: Appointment[];
-  onPlansUpdate: (plans: Plan[]) => void;
 }) {
+  const { data: plansData, refetch: refetchPlans } = useTreatmentPlans(patientId);
+  const plans = plansData?.plans ?? [];
+  const invalidate = useInvalidateAdminQueries();
+  
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [showProcedureForm, setShowProcedureForm] = useState<string | null>(
     null
@@ -47,16 +54,6 @@ function TreatmentPlansSection({
     }
     setExpandedPlans(newExpanded);
   };
-
-  const fetchPlans = async () => {
-    const res = await fetch(`${API_BASE}/treatment-plans/${patientId}`);
-    const data = await res.json();
-    onPlansUpdate(data.plans || []);
-  };
-
-  useEffect(() => {
-    fetchPlans();
-  }, [patientId]);
 
   return (
     <section className="bg-white/80 backdrop-blur rounded-xl border shadow-sm p-5">
@@ -75,7 +72,7 @@ function TreatmentPlansSection({
           patientId={patientId}
           onSuccess={() => {
             setShowPlanForm(false);
-            fetchPlans();
+            invalidate.invalidateTreatmentPlans(patientId);
           }}
         />
       )}
@@ -118,16 +115,16 @@ function TreatmentPlansSection({
                   <ProceduresList
                     planId={plan.id}
                     appointments={appointments}
-                    onUpdate={fetchPlans}
+                    onUpdate={() => invalidate.invalidateTreatmentPlans(patientId)}
                     procedures={(plan as any).procedures}
                   />
                   {showProcedureForm === plan.id && (
                     <CreateProcedureForm
                       treatmentPlanId={plan.id}
                       appointments={appointments}
+                      patientId={patientId}
                       onSuccess={() => {
                         setShowProcedureForm(null);
-                        fetchPlans();
                       }}
                     />
                   )}
@@ -151,6 +148,7 @@ function CreateTreatmentPlanForm({
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState("active");
   const [loading, setLoading] = useState(false);
+  const invalidate = useInvalidateAdminQueries();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,6 +162,7 @@ function CreateTreatmentPlanForm({
         body: JSON.stringify({ title, status }),
       });
       if (res.ok) {
+        invalidate.invalidateTreatmentPlans(patientId);
         onSuccess();
       } else {
         alert("Failed to create treatment plan");
@@ -278,16 +277,19 @@ function CreateProcedureForm({
   treatmentPlanId,
   appointments,
   onSuccess,
+  patientId,
 }: {
   treatmentPlanId: string;
   appointments: Appointment[];
   onSuccess: () => void;
+  patientId: string;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [appointmentId, setAppointmentId] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const invalidate = useInvalidateAdminQueries();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -307,6 +309,7 @@ function CreateProcedureForm({
         }),
       });
       if (res.ok) {
+        invalidate.invalidateTreatmentPlans(patientId);
         onSuccess();
       } else {
         alert("Failed to create procedure");
@@ -412,6 +415,7 @@ function CreateAppointmentForm({
   const [type, setType] = useState("consultation");
   const [treatmentPlanId, setTreatmentPlanId] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const invalidate = useInvalidateAdminQueries();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -432,6 +436,7 @@ function CreateAppointmentForm({
         }),
       });
       if (res.ok) {
+        invalidate.invalidatePatient(patientId);
         onSuccess();
       } else {
         alert("Failed to create appointment");
@@ -555,11 +560,14 @@ export default function PatientDetail({
   params: Promise<{ id: string }>;
 }) {
   const { id: patientId } = React.use(params);
-  const [patient, setPatient] = useState<Patient | null>(null);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const invalidate = useInvalidateAdminQueries();
+  const { data: patientData, isLoading: isLoadingPatient } = usePatient(patientId);
+  const { data: plansData } = useTreatmentPlans(patientId);
+  
+  const patient = patientData?.patient || null;
+  const plans = plansData?.plans ?? [];
+  const appointments = patientData?.appointments ?? [];
   const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [reschedule, setReschedule] = useState<{
     id: string;
@@ -570,23 +578,20 @@ export default function PatientDetail({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // Initialize messages from patient data
   useEffect(() => {
+    if (patientData?.messages) {
+      setMessages(patientData.messages);
+    }
+  }, [patientData?.messages]);
+
+  // Realtime updates via WebSocket
+  useEffect(() => {
+    if (!patientId) return;
     let mounted = true;
-    fetch(`${API_BASE}/patients/${patientId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!mounted) return;
-        setPatient(data.patient);
-        setPlans(data.plans ?? []);
-        setAppointments(data.appointments ?? []);
-        setMessages(data.messages ?? []);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-    // Realtime updates via WebSocket
+    
     // Use singleton socket - don't disconnect it, just change rooms
-    const socket: any = connectSocket({ patientId });
+    const socket = getSocket({ baseUrl: window.location.origin });
 
     // Store socket reference globally for sendMessage
     (window as any).__adminPatientSocket = socket;
@@ -632,7 +637,7 @@ export default function PatientDetail({
 
     // If socket doesn't exist (shouldn't happen), create it
     if (!socket) {
-      socket = connectSocket({ patientId });
+      socket = getSocket({ baseUrl: window.location.origin });
       (window as any).__adminPatientSocket = socket;
     }
 
@@ -690,14 +695,14 @@ export default function PatientDetail({
         body: JSON.stringify({ datetime: reschedule.when }),
       }
     );
-    const data = await r.json();
-    setAppointments((arr) =>
-      arr.map((a) => (a.id === data.appointment.id ? data.appointment : a))
-    );
-    setReschedule(null);
+    if (r.ok) {
+      // Invalidate patient data to refetch
+      invalidate.invalidatePatient(patientId);
+      setReschedule(null);
+    }
   };
 
-  if (loading)
+  if (isLoadingPatient)
     return <div className="animate-pulse text-slate-500">Loading…</div>;
   if (!patient) return <p className="text-red-600">Patient not found</p>;
 
@@ -710,9 +715,7 @@ export default function PatientDetail({
 
       <TreatmentPlansSection
         patientId={patientId}
-        plans={plans}
         appointments={appointments}
-        onPlansUpdate={(newPlans) => setPlans(newPlans)}
       />
 
       <section className="bg-white/80 backdrop-blur rounded-xl border shadow-sm p-5">
@@ -732,12 +735,8 @@ export default function PatientDetail({
             plans={plans}
             onSuccess={() => {
               setShowAppointmentForm(false);
-              // Refetch appointments
-              fetch(`${API_BASE}/patients/${patientId}`)
-                .then((r) => r.json())
-                .then((data) => {
-                  setAppointments(data.appointments ?? []);
-                });
+              // Invalidate patient data to refetch
+              invalidate.invalidatePatient(patientId);
             }}
           />
         )}
@@ -814,12 +813,8 @@ export default function PatientDetail({
                               }
                             );
                             if (res.ok) {
-                              // Refetch appointments
-                              fetch(`${API_BASE}/patients/${patientId}`)
-                                .then((r) => r.json())
-                                .then((data) => {
-                                  setAppointments(data.appointments ?? []);
-                                });
+                              // Invalidate patient data to refetch
+                              invalidate.invalidatePatient(patientId);
                             } else {
                               alert("Failed to cancel appointment");
                             }

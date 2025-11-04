@@ -43,7 +43,7 @@ export function middleware(req: NextRequest) {
     res.headers.set(
       "Access-Control-Allow-Methods",
       req.headers.get("Access-Control-Request-Method") ||
-        "GET,POST,PUT,DELETE,OPTIONS"
+        "GET,POST,PUT,DELETE,OPTIONS,PATCH"
     );
     res.headers.set("Access-Control-Allow-Credentials", "true");
   }

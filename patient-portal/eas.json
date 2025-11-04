@@ -6,6 +6,21 @@
     "preview": {
       "ios": {
         "distribution": "internal",
+        "simulator": false,
+        "autoIncrement": "version",
+        "buildConfiguration": "Release"
+      },
+      "android": {
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE": "https://patient-portal-admin-service-production.up.railway.app/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://patient-portal-admin-service-production.up.railway.app"
+      }
+    },
+    "production": {
+      "ios": {
+        "distribution": "store",
         "autoIncrement": "version"
       },
       "android": {
@@ -18,8 +33,14 @@
     }
   },
   "submit": {
-    "ios": {
-      "ascAppId": null
+    "production": {
+      "ios": {
+        "ascAppId": null
+      },
+      "android": {
+        "serviceAccountKeyPath": null,
+        "track": "internal"
+      }
     }
   }
 }

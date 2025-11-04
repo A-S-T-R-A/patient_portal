@@ -8,6 +8,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import { Header } from "../components/Header";
+import { colors } from "../lib/colors";
 
 const promotions = [
   {
@@ -61,12 +63,12 @@ export default function PromotionsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Header title="Promotions" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Special Offers</Text>
           <Text style={styles.subtitle}>
             Exclusive deals and promotions tailored for you
           </Text>
@@ -138,7 +140,7 @@ export default function PromotionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.primaryWhite,
   },
   scrollView: {
     flex: 1,
@@ -148,16 +150,11 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: "#000",
-    marginBottom: 8,
+    marginTop: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: colors.textSecondary,
   },
   grid: {
     gap: 16,

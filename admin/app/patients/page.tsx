@@ -1,8 +1,9 @@
 "use client";
-import React, { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { API_BASE } from "@/lib/api";
+import { usePatients } from "@/lib/admin-queries";
 
 type Patient = {
   id: string;
@@ -14,9 +15,6 @@ type Patient = {
 // Use admin API routed via Next
 
 function PatientsPageInner() {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -35,16 +33,9 @@ function PatientsPageInner() {
     return s ? `?${s}` : "";
   }, [q, page, pageSize]);
 
-  useEffect(() => {
-    setLoading(true);
-    fetch(`${API_BASE}/patients${queryString}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setPatients(data.patients ?? []);
-        setTotal(data.total ?? 0);
-      })
-      .finally(() => setLoading(false));
-  }, [queryString]);
+  const { data, isLoading: loading } = usePatients(queryString);
+  const patients = data?.patients ?? [];
+  const total = data?.total ?? 0;
 
   const setParam = (next: Record<string, string | number | undefined>) => {
     const p = new URLSearchParams(searchParams.toString());

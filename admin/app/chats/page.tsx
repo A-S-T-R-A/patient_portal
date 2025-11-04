@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useMemo, Suspense } from "react";
+import { useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useChats } from "@/lib/admin-queries";
 
 type Chat = {
   patient: {
@@ -21,8 +22,8 @@ type Chat = {
 
 function ChatsContent() {
   const searchParams = useSearchParams();
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading: loading } = useChats();
+  const chats = data?.chats || [];
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
 
   const filteredChats = useMemo(() => {
@@ -35,16 +36,6 @@ function ChatsContent() {
         chat.latestMessage?.content.toLowerCase().includes(q)
     );
   }, [chats, searchQuery]);
-
-  useEffect(() => {
-    fetch("/api/chats")
-      .then((r) => r.json())
-      .then((data) => {
-        setChats(data.chats || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);

@@ -9,11 +9,15 @@ import {
   Modal,
   Animated,
   Dimensions,
+  Linking,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth, usePatient } from "../lib/queries";
-import { logout } from "../lib/api";
+import { logout, API_BASE } from "../lib/api";
 import { useQueryClient } from "@tanstack/react-query";
+import { colors } from "../lib/colors";
+import { Header } from "../components/Header";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -179,12 +183,12 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Header title="Profile" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Profile</Text>
           <Text style={styles.subtitle}>
             Manage your personal information and preferences
           </Text>
@@ -193,7 +197,7 @@ export default function ProfileScreen() {
         <View style={styles.grid}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <Text style={{ fontSize: 20, color: "#007AFF" }}>👤</Text>
+              <Text style={{ fontSize: 20, color: colors.textPrimary }}>👤</Text>
               <Text style={styles.cardTitle}>Personal Information</Text>
             </View>
             <View style={styles.cardContent}>
@@ -246,7 +250,7 @@ export default function ProfileScreen() {
                 style={styles.editButton}
                 onPress={handleOpenEdit}
               >
-                <Text style={{ color: "#fff" }}>✏️</Text>
+                <Text style={{ color: colors.primaryWhite }}>✏️</Text>
                 <Text style={styles.editButtonText}>Edit Profile</Text>
               </TouchableOpacity>
             </View>
@@ -301,6 +305,68 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {/* Privacy Policy Link */}
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={() => {
+                const privacyUrl =
+                  require("../../app.json").expo.extra?.privacyPolicyUrl ||
+                  "https://your-domain.com/privacy";
+                Linking.openURL(privacyUrl);
+              }}
+            >
+              <Text style={styles.linkButtonText}>🔒 Privacy Policy</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Delete Account Button */}
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={async () => {
+                if (
+                  !confirm(
+                    "Are you sure you want to delete your account? This action cannot be undone and will delete all your data."
+                  )
+                )
+                  return;
+
+                if (
+                  !confirm(
+                    "This will permanently delete all your appointments, messages, and treatment history. Are you absolutely sure?"
+                  )
+                )
+                  return;
+
+                try {
+                  const res = await fetch(
+                    `${API_BASE}/patients/${patientId}/delete`,
+                    {
+                      method: "DELETE",
+                      credentials: "include",
+                    }
+                  );
+
+                  if (res.ok) {
+                    // Logout and redirect
+                    await handleLogout();
+                    alert(
+                      "Your account has been deleted. You will be logged out."
+                    );
+                  } else {
+                    alert("Failed to delete account. Please try again.");
+                  }
+                } catch (error) {
+                  console.error("Delete account error:", error);
+                  alert("Failed to delete account. Please try again.");
+                }
+              }}
+            >
+              <Text style={styles.deleteButtonText}>🗑️ Delete Account</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Logout Button */}
           <View style={styles.card}>
             <TouchableOpacity
@@ -333,8 +399,9 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={styles.modalCloseButton}
                   onPress={handleCancelEdit}
+                  activeOpacity={0.7}
                 >
-                  <Text style={{ fontSize: 24 }}>✖️</Text>
+                  <Text style={{ fontSize: 24, color: colors.textPrimary }}>✖️</Text>
                 </TouchableOpacity>
                 <Text style={styles.modalTitle}>Edit Profile</Text>
                 <View style={{ width: 24 }} />
@@ -437,7 +504,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.primaryWhite,
   },
   scrollView: {
     flex: 1,
@@ -447,27 +514,22 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: "#000",
-    marginBottom: 8,
+    marginTop: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: colors.textSecondary,
   },
   grid: {
     gap: 24,
   },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.primaryWhite,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: colors.greyscale200,
     padding: 16,
-    shadowColor: "#000",
+    shadowColor: colors.greyscale900,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -482,11 +544,11 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#000",
+    color: colors.textPrimary,
   },
   cardDescription: {
     fontSize: 14,
-    color: "#666",
+    color: colors.textSecondary,
     marginTop: 4,
   },
   cardContent: {
@@ -502,23 +564,23 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#007AFF",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#fff",
+    color: colors.primaryWhite,
   },
   profileName: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#000",
+    color: colors.textPrimary,
   },
   profileSubtext: {
     fontSize: 14,
-    color: "#666",
+    color: colors.textSecondary,
   },
   infoList: {
     gap: 12,
@@ -530,35 +592,35 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 14,
-    color: "#000",
+    color: colors.textPrimary,
   },
   editButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#007AFF",
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     borderRadius: 6,
     marginTop: 8,
   },
   editButtonText: {
-    color: "#fff",
+    color: colors.primaryWhite,
     fontSize: 14,
     fontWeight: "500",
   },
   historySection: {
     marginBottom: 16,
     padding: 12,
-    backgroundColor: "#F9F9F9",
+    backgroundColor: colors.surface,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: colors.greyscale200,
   },
   historyTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#000",
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   historyList: {
@@ -566,7 +628,7 @@ const styles = StyleSheet.create({
   },
   historyItem: {
     fontSize: 14,
-    color: "#666",
+    color: colors.textSecondary,
   },
   modalOverlay: {
     flex: 1,
@@ -577,8 +639,8 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     width: "100%",
-    backgroundColor: "#fff",
-    shadowColor: "#000",
+    backgroundColor: colors.primaryWhite,
+    shadowColor: colors.greyscale900,
     shadowOffset: { width: -4, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -600,11 +662,11 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#000",
+    color: colors.textPrimary,
   },
   modalDescription: {
     fontSize: 14,
-    color: "#666",
+    color: colors.textSecondary,
     marginBottom: 20,
   },
   modalForm: {
@@ -616,16 +678,16 @@ const styles = StyleSheet.create({
   formLabel: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#000",
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   formInput: {
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: colors.greyscale200,
     borderRadius: 6,
     padding: 12,
     fontSize: 14,
-    backgroundColor: "#fff",
+    backgroundColor: colors.primaryWhite,
   },
   modalButtons: {
     flexDirection: "row",
@@ -639,20 +701,20 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   cancelButton: {
-    backgroundColor: "#F5F5F5",
+    backgroundColor: colors.surface,
   },
   cancelButtonText: {
-    color: "#000",
+    color: colors.textPrimary,
     fontSize: 14,
   },
   saveButton: {
-    backgroundColor: "#007AFF",
+    backgroundColor: colors.primary,
   },
   disabledButton: {
     opacity: 0.5,
   },
   saveButtonText: {
-    color: "#fff",
+    color: colors.primaryWhite,
     fontSize: 14,
     fontWeight: "500",
   },
@@ -662,14 +724,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logoutButton: {
-    backgroundColor: "#FF3B30",
+    backgroundColor: colors.greyscale700,
     borderRadius: 8,
     padding: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   logoutButtonText: {
-    color: "#fff",
+    color: colors.primaryWhite,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  linkButton: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.greyscale200,
+  },
+  linkButtonText: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  deleteButton: {
+    backgroundColor: colors.greyscale700,
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.greyscale800,
+  },
+  deleteButtonText: {
+    color: colors.primaryWhite,
     fontSize: 16,
     fontWeight: "600",
   },

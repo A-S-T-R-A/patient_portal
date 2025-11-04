@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { API_BASE } from "@/lib/api";
 import Link from "next/link";
+import { useAppointments, useInvalidateAdminQueries } from "@/lib/admin-queries";
 
 function AppointmentsContent() {
   const searchParams = useSearchParams();
@@ -11,35 +12,23 @@ function AppointmentsContent() {
   const [statusFilter, setStatusFilter] = useState(
     searchParams.get("status") || "all"
   );
-  const [appointments, setAppointments] = useState<any[]>([]);
-  const [stats, setStats] = useState({
+  const invalidate = useInvalidateAdminQueries();
+
+  const paramsString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    return params.toString() ? `?${params.toString()}` : "";
+  }, [search, statusFilter]);
+
+  const { data, isLoading: loading } = useAppointments(paramsString);
+  const appointments = data?.appointments || [];
+  const stats = data?.stats || {
     scheduled: 0,
     upcoming: 0,
     missed: 0,
     completed: 0,
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (statusFilter !== "all") params.set("status", statusFilter);
-
-    fetch(`${API_BASE}/appointments?${params.toString()}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setAppointments(data.appointments || []);
-        setStats(
-          data.stats || {
-            scheduled: 0,
-            upcoming: 0,
-            missed: 0,
-            completed: 0,
-          }
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [search, statusFilter]);
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -199,26 +188,8 @@ function AppointmentsContent() {
                             }
                           );
                           if (res.ok) {
-                            // Refetch appointments
-                            const params = new URLSearchParams();
-                            if (search) params.set("search", search);
-                            if (statusFilter !== "all")
-                              params.set("status", statusFilter);
-                            fetch(
-                              `${API_BASE}/appointments?${params.toString()}`
-                            )
-                              .then((r) => r.json())
-                              .then((data) => {
-                                setAppointments(data.appointments || []);
-                                setStats(
-                                  data.stats || {
-                                    scheduled: 0,
-                                    upcoming: 0,
-                                    missed: 0,
-                                    completed: 0,
-                                  }
-                                );
-                              });
+                            // Invalidate appointments cache to refetch
+                            invalidate.invalidateAppointments(paramsString);
                           } else {
                             alert("Failed to cancel appointment");
                           }

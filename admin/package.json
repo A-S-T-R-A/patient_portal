@@ -34,5 +34,10 @@
   },
   "prisma": {
     "schema": "./prisma/schema.prisma"
+  },
+  "optionalDependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
+    "cookie": "^1.0.2",
+    "ioredis": "^5.8.2"
   }
 }
