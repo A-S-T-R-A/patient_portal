@@ -82,7 +82,11 @@ export function setAuthToken(token: string): void {
   try {
     storageSync.setItem("auth_token", token);
     // Also set in sessionStorage for OAuth callback compatibility (web only)
-    if (Platform.OS === "web" && typeof window !== "undefined" && window.sessionStorage) {
+    if (
+      Platform.OS === "web" &&
+      typeof window !== "undefined" &&
+      window.sessionStorage
+    ) {
       window.sessionStorage.setItem("auth_token_temp", token);
     } else {
       // Native: also store in temp key
@@ -98,7 +102,11 @@ export function clearAuthToken(): void {
   try {
     storageSync.removeItem("auth_token");
     storageSync.removeItem("auth_token_temp");
-    if (Platform.OS === "web" && typeof window !== "undefined" && window.sessionStorage) {
+    if (
+      Platform.OS === "web" &&
+      typeof window !== "undefined" &&
+      window.sessionStorage
+    ) {
       window.sessionStorage.removeItem("auth_token_temp");
     }
   } catch (e) {
@@ -163,7 +171,11 @@ export async function initiateAppleAuth(role: string = "patient") {
           // Save token
           try {
             storageSync.setItem("auth_token", token);
-            if (Platform.OS === "web" && typeof window !== "undefined" && window.sessionStorage) {
+            if (
+              Platform.OS === "web" &&
+              typeof window !== "undefined" &&
+              window.sessionStorage
+            ) {
               window.sessionStorage.setItem("auth_token_temp", token);
             } else {
               storageSync.setItem("auth_token_temp", token);
@@ -178,16 +190,24 @@ export async function initiateAppleAuth(role: string = "patient") {
           if (globalQueryClient) {
             console.log("[initiateAppleAuth] Invalidating auth queries");
             globalQueryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-            
+
             // Immediately refetch auth to get user data
             // This will trigger AuthChecker to update isAuthenticated state
             // which will automatically switch screens in MainNavigator
             console.log("[initiateAppleAuth] Refetching auth data");
-            globalQueryClient.refetchQueries({ queryKey: ["auth", "me"] }).then(() => {
-              console.log("[initiateAppleAuth] Auth data refetched - AuthChecker will handle navigation");
-            }).catch((err) => {
-              console.error("[initiateAppleAuth] Failed to refetch auth:", err);
-            });
+            globalQueryClient
+              .refetchQueries({ queryKey: ["auth", "me"] })
+              .then(() => {
+                console.log(
+                  "[initiateAppleAuth] Auth data refetched - AuthChecker will handle navigation"
+                );
+              })
+              .catch((err) => {
+                console.error(
+                  "[initiateAppleAuth] Failed to refetch auth:",
+                  err
+                );
+              });
           }
         } else {
           console.warn("[initiateAppleAuth] No token in URL:", resultUrl);
@@ -253,7 +273,7 @@ export async function initiateGoogleAuth(
       console.log("[initiateGoogleAuth] Full result URL:", resultUrl);
       console.log("[initiateGoogleAuth] Result type:", result.type);
       console.log("[initiateGoogleAuth] Has resultUrl:", !!resultUrl);
-      
+
       if (result.type === "success" && resultUrl) {
         console.log("[initiateGoogleAuth] Processing success result with URL");
         // Deep link was called - extract token from URL
@@ -264,11 +284,14 @@ export async function initiateGoogleAuth(
         console.log("[initiateGoogleAuth] Normalized URL:", normalizedUrl);
 
         let token: string | null = null;
-        
+
         try {
           const urlObj = new URL(normalizedUrl);
-          console.log("[initiateGoogleAuth] URL object created, searchParams:", urlObj.searchParams.toString());
-          
+          console.log(
+            "[initiateGoogleAuth] URL object created, searchParams:",
+            urlObj.searchParams.toString()
+          );
+
           token =
             urlObj.searchParams.get("token") ||
             urlObj.searchParams.get("_auth_token");
@@ -278,20 +301,35 @@ export async function initiateGoogleAuth(
             token ? `present (length: ${token.length})` : "missing"
           );
         } catch (urlError) {
-          console.error("[initiateGoogleAuth] Failed to parse URL:", urlError, "URL:", normalizedUrl);
+          console.error(
+            "[initiateGoogleAuth] Failed to parse URL:",
+            urlError,
+            "URL:",
+            normalizedUrl
+          );
           // Try to extract token manually using regex
           const tokenMatch = resultUrl.match(/[?&#]token=([^&#]+)/);
           token = tokenMatch ? decodeURIComponent(tokenMatch[1]) : null;
-          console.log("[initiateGoogleAuth] Manual token extraction:", token ? `found (length: ${token.length})` : "not found");
+          console.log(
+            "[initiateGoogleAuth] Manual token extraction:",
+            token ? `found (length: ${token.length})` : "not found"
+          );
         }
 
         if (token) {
-          console.log("[initiateGoogleAuth] Token extracted, length:", token.length);
-          
+          console.log(
+            "[initiateGoogleAuth] Token extracted, length:",
+            token.length
+          );
+
           // Save token
           try {
             storageSync.setItem("auth_token", token);
-            if (Platform.OS === "web" && typeof window !== "undefined" && window.sessionStorage) {
+            if (
+              Platform.OS === "web" &&
+              typeof window !== "undefined" &&
+              window.sessionStorage
+            ) {
               window.sessionStorage.setItem("auth_token_temp", token);
             } else {
               storageSync.setItem("auth_token_temp", token);
@@ -303,25 +341,41 @@ export async function initiateGoogleAuth(
 
           // Trigger auth refetch - on native invalidate queries instead of reload
           // Navigation will happen automatically via AuthChecker when authData updates
-          console.log("[initiateGoogleAuth] Checking globalQueryClient:", !!globalQueryClient);
+          console.log(
+            "[initiateGoogleAuth] Checking globalQueryClient:",
+            !!globalQueryClient
+          );
           if (globalQueryClient) {
             console.log("[initiateGoogleAuth] Invalidating auth queries");
             globalQueryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-            
+
             // Immediately refetch auth to get user data
             // This will trigger AuthChecker to update isAuthenticated state
             // which will automatically switch screens in MainNavigator
             console.log("[initiateGoogleAuth] Refetching auth data");
-            globalQueryClient.refetchQueries({ queryKey: ["auth", "me"] }).then((result) => {
-              console.log("[initiateGoogleAuth] Auth data refetched - AuthChecker will handle navigation", result);
-            }).catch((err) => {
-              console.error("[initiateGoogleAuth] Failed to refetch auth:", err);
-            });
+            globalQueryClient
+              .refetchQueries({ queryKey: ["auth", "me"] })
+              .then((result) => {
+                console.log(
+                  "[initiateGoogleAuth] Auth data refetched - AuthChecker will handle navigation",
+                  result
+                );
+              })
+              .catch((err) => {
+                console.error(
+                  "[initiateGoogleAuth] Failed to refetch auth:",
+                  err
+                );
+              });
           } else {
-            console.error("[initiateGoogleAuth] globalQueryClient is not set! Cannot refetch auth.");
+            console.error(
+              "[initiateGoogleAuth] globalQueryClient is not set! Cannot refetch auth."
+            );
             // Fallback: try to manually trigger auth check after a delay
             setTimeout(() => {
-              console.log("[initiateGoogleAuth] Attempting fallback auth check");
+              console.log(
+                "[initiateGoogleAuth] Attempting fallback auth check"
+              );
               if (typeof window !== "undefined" && window.location) {
                 window.location.reload();
               }
@@ -361,12 +415,23 @@ export async function fetchWithAuth(
   try {
     // First try storage (persistent across refreshes)
     token = storageSync.getItem("auth_token");
-    console.log("[fetchWithAuth] Token from storage:", token ? `present (length: ${token.length})` : "missing");
-    
+    console.log(
+      "[fetchWithAuth] Token from storage:",
+      token ? `present (length: ${token.length})` : "missing"
+    );
+
     // Fallback to sessionStorage (temporary, from OAuth callback) - web only
-    if (!token && Platform.OS === "web" && typeof window !== "undefined" && window.sessionStorage) {
+    if (
+      !token &&
+      Platform.OS === "web" &&
+      typeof window !== "undefined" &&
+      window.sessionStorage
+    ) {
       token = window.sessionStorage.getItem("auth_token_temp");
-      console.log("[fetchWithAuth] Token from sessionStorage:", token ? `present (length: ${token.length})` : "missing");
+      console.log(
+        "[fetchWithAuth] Token from sessionStorage:",
+        token ? `present (length: ${token.length})` : "missing"
+      );
       // If we have sessionStorage token, promote it to storage for persistence
       if (token) {
         storageSync.setItem("auth_token", token);
@@ -390,7 +455,9 @@ export async function fetchWithAuth(
     headers.set("Authorization", `Bearer ${token}`);
     console.log("[fetchWithAuth] Added Authorization header with token");
   } else {
-    console.warn("[fetchWithAuth] No token available, request will be unauthenticated");
+    console.warn(
+      "[fetchWithAuth] No token available, request will be unauthenticated"
+    );
   }
 
   console.log("[fetchWithAuth] Making request to:", url);
@@ -408,7 +475,11 @@ export async function logout(): Promise<void> {
   try {
     storageSync.removeItem("auth_token");
     storageSync.removeItem("auth_token_temp");
-    if (Platform.OS === "web" && typeof window !== "undefined" && window.sessionStorage) {
+    if (
+      Platform.OS === "web" &&
+      typeof window !== "undefined" &&
+      window.sessionStorage
+    ) {
       window.sessionStorage.removeItem("auth_token_temp");
     }
   } catch (e) {
@@ -507,8 +578,17 @@ export function connectEvents(params?: {
 }
 
 // Re-export from new socket module
-export { initSocket, getSocket, setGlobalHandler, joinRoom, leaveRoom } from "./socket";
-import { initSocket, setGlobalHandler as setSocketGlobalHandler } from "./socket";
+export {
+  initSocket,
+  getSocket,
+  setGlobalHandler,
+  joinRoom,
+  leaveRoom,
+} from "./socket";
+import {
+  initSocket,
+  setGlobalHandler as setSocketGlobalHandler,
+} from "./socket";
 
 // Global message handler - установлен один раз и восстанавливается при переподключении
 let globalMessageHandler: ((data: any) => void) | null = null;
@@ -519,10 +599,13 @@ export function setupGlobalMessageHandler(
   patientId: string,
   handler: (message: any) => void
 ) {
-  console.log("[socket] Setting up global message handler for patientId:", patientId);
+  console.log(
+    "[socket] Setting up global message handler for patientId:",
+    patientId
+  );
   globalMessageHandler = handler;
   globalPatientId = patientId;
-  
+
   // Устанавливаем через новый менеджер
   setSocketGlobalHandler("message:new", handler);
 }
@@ -541,18 +624,32 @@ export async function connectSocket(params?: {
   doctorId?: string;
 }) {
   const socket = await initSocket();
-  
-  // Автоматически присоединяемся к комнатам
-  if (params?.patientId) {
-    const { joinRoom } = await import("./socket");
-    joinRoom(`patient:${params.patientId}`);
+  const { joinRoom } = await import("./socket");
+
+  // Автоматически присоединяемся к комнатам после авторизации
+  socket.once("core:auth:success", () => {
+    if (params?.patientId) {
+      joinRoom(`patient:${params.patientId}`);
+    }
+    if (params?.doctorId) {
+      joinRoom(`doctor:${params.doctorId}`);
+    }
+  });
+
+  // Если уже подключен и авторизован, присоединяемся сразу
+  if (socket.connected) {
+    // Ждем немного, чтобы убедиться что авторизация прошла
+    setTimeout(() => {
+      if (socket.connected) {
+        if (params?.patientId) {
+          joinRoom(`patient:${params.patientId}`);
+        }
+        if (params?.doctorId) {
+          joinRoom(`doctor:${params.doctorId}`);
+        }
+      }
+    }, 500);
   }
-  if (params?.doctorId) {
-    const { joinRoom } = await import("./socket");
-    joinRoom(`doctor:${params.doctorId}`);
-  }
-  
+
   return socket as any;
 }
-
-

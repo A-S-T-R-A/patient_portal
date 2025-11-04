@@ -30,7 +30,7 @@ function ChatsContent() {
     if (!searchQuery.trim()) return chats;
     const q = searchQuery.toLowerCase();
     return chats.filter(
-      (chat) =>
+      (chat: any) =>
         chat.patient.name.toLowerCase().includes(q) ||
         chat.patient.email.toLowerCase().includes(q) ||
         chat.latestMessage?.content.toLowerCase().includes(q)
@@ -101,7 +101,7 @@ function ChatsContent() {
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 divide-y divide-slate-200">
-          {filteredChats.map((chat) => (
+          {filteredChats.map((chat: any) => (
             <Link
               key={chat.patient.id}
               href={`/patients/${chat.patient.id}`}

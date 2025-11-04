@@ -81,7 +81,7 @@ function TreatmentPlansSection({
         <p className="text-slate-500">No treatment plans</p>
       ) : (
         <div className="space-y-3 mt-3">
-          {plans.map((plan) => (
+          {plans.map((plan: any) => (
             <div key={plan.id} className="border rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -518,7 +518,7 @@ function CreateAppointmentForm({
               className="w-full border rounded px-3 py-2 text-sm"
             >
               <option value="">None</option>
-              {plans.map((plan) => (
+              {plans.map((plan: any) => (
                 <option key={plan.id} value={plan.id}>
                   {plan.title}
                 </option>
@@ -745,7 +745,7 @@ export default function PatientDetail({
           <p className="text-slate-500">No appointments</p>
         ) : (
           <ul className="space-y-2 mt-3">
-            {appointments.map((a) => (
+            {appointments.map((a: any) => (
               <li
                 key={a.id}
                 className="border rounded-lg p-3 flex items-center justify-between hover:bg-slate-50 transition"
@@ -763,7 +763,7 @@ export default function PatientDetail({
                       <input
                         type="datetime-local"
                         className="border rounded px-2 py-1 text-sm"
-                        value={reschedule.when}
+                        value={reschedule?.when || ''}
                         min={new Date().toISOString().slice(0, 16)}
                         onChange={(e) =>
                           setReschedule({ id: a.id, when: e.target.value })
@@ -772,7 +772,7 @@ export default function PatientDetail({
                       <button
                         className="px-2 py-1 text-sm bg-blue-600 text-white rounded shadow"
                         onClick={doReschedule}
-                        disabled={!reschedule.when}
+                        disabled={!reschedule?.when}
                       >
                         Save
                       </button>

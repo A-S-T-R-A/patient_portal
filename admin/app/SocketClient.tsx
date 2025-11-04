@@ -8,60 +8,182 @@ export default function SocketClient() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // 1) Получаем socket_token (создаст cookie + вернёт JSON)
-    fetch("/api/rt/issue-socket-token")
-      .then(() => {
-        // 2) Подключаемся
-        const socket = getSocket({ baseUrl: window.location.origin });
+    let mounted = true;
 
-        // 3) Глобальный обработчик новых сообщений
-        setGlobalHandler("message:new", ({ message }: any) => {
-          console.log("[admin] message:new", message);
-          // Invalidate chats to refresh the list
-          queryClient.invalidateQueries({ queryKey: adminQueryKeys.chats() });
-          // If viewing a specific patient, invalidate their data
-          if (message?.patientId) {
-            queryClient.invalidateQueries({
-              queryKey: adminQueryKeys.patient(message.patientId),
-            });
-          }
+    const setupSocket = async () => {
+      try {
+        console.log("[SocketClient] Setting up socket connection...");
+
+        // 1. Получаем socket_token
+        const tokenRes = await fetch("/api/rt/issue-socket-token");
+        if (!tokenRes.ok) {
+          throw new Error("Failed to get socket token");
+        }
+
+        const tokenData = await tokenRes.json();
+        const socketToken = tokenData?.socketToken;
+
+        if (!socketToken) {
+          throw new Error("No socket token received");
+        }
+
+        console.log("[SocketClient] Socket token obtained");
+
+        // 2. Подключаемся с токеном
+        const baseUrl = window.location.origin;
+        const socket = getSocket({ baseUrl, socketToken });
+
+        // 3. Ждем успешной авторизации
+        socket.once("core:auth:success", () => {
+          if (!mounted) return;
+          console.log("[SocketClient] Socket authenticated successfully");
+
+          // 4. Настраиваем глобальные обработчики после авторизации
+          setupHandlers();
+
+          // 5. Присоединяемся к комнате доктора
+          // TODO: получить реальный doctorId из auth
+          joinRoom("doctor:seed");
         });
 
-        // 4) Глобальный обработчик обновлений аппойнтментов
-        setGlobalHandler("appointment:update", ({ appointment }: any) => {
-          console.log("[admin] appointment:update", appointment?.id);
-          // Invalidate appointments list
-          queryClient.invalidateQueries({ queryKey: ["admin", "appointments"] });
-          // Invalidate dashboard stats
-          queryClient.invalidateQueries({ queryKey: adminQueryKeys.dashboard() });
-          // If appointment has patientId, invalidate patient data
-          if (appointment?.patientId) {
-            queryClient.invalidateQueries({
-              queryKey: adminQueryKeys.patient(appointment.patientId),
-            });
-          }
+        // Обработка ошибок авторизации
+        socket.once("core:auth:error", (error) => {
+          console.error("[SocketClient] Socket auth error:", error);
         });
 
-        // 5) Глобальный обработчик обновлений лечения
-        setGlobalHandler("treatment:update", ({ procedure }: any) => {
-          console.log("[admin] treatment:update", procedure);
-          const patientId = procedure?.treatmentPlan?.patientId;
-          if (patientId) {
-            queryClient.invalidateQueries({
-              queryKey: adminQueryKeys.treatmentPlans(patientId),
-            });
-            queryClient.invalidateQueries({
-              queryKey: adminQueryKeys.patient(patientId),
-            });
-          }
-        });
+        // Настройка обработчиков (они будут установлены после авторизации)
+        const setupHandlers = () => {
+          // Глобальный обработчик новых сообщений
+          setGlobalHandler("message:new", ({ message }: any) => {
+            if (!mounted) return;
+            console.log("[SocketClient] message:new received:", message?.id);
 
-        // 6) Входим в комнаты (для доктора)
-        joinRoom("doctor:seed");
-      })
-      .catch((err) => {
+            // Обновляем кэш чатов
+            queryClient.invalidateQueries({ queryKey: adminQueryKeys.chats() });
+
+            // Обновляем данные пациента если сообщение относится к нему
+            if (message?.patientId) {
+              queryClient.invalidateQueries({
+                queryKey: adminQueryKeys.patient(message.patientId),
+              });
+            }
+          });
+
+          // Глобальный обработчик обновлений аппойнтментов
+          setGlobalHandler("appointment:update", ({ appointment }: any) => {
+            if (!mounted) return;
+            console.log(
+              "[SocketClient] appointment:update received:",
+              appointment?.id
+            );
+
+            // Обновляем список аппойнтментов
+            queryClient.invalidateQueries({
+              queryKey: ["admin", "appointments"],
+            });
+
+            // Обновляем статистику дашборда
+            queryClient.invalidateQueries({
+              queryKey: adminQueryKeys.dashboard(),
+            });
+
+            // Обновляем данные пациента
+            if (appointment?.patientId) {
+              queryClient.invalidateQueries({
+                queryKey: adminQueryKeys.patient(appointment.patientId),
+              });
+            }
+          });
+
+          // Глобальный обработчик новых аппойнтментов
+          setGlobalHandler("appointment:new", ({ appointment }: any) => {
+            if (!mounted) return;
+            console.log(
+              "[SocketClient] appointment:new received:",
+              appointment?.id
+            );
+
+            queryClient.invalidateQueries({
+              queryKey: ["admin", "appointments"],
+            });
+            queryClient.invalidateQueries({
+              queryKey: adminQueryKeys.dashboard(),
+            });
+
+            if (appointment?.patientId) {
+              queryClient.invalidateQueries({
+                queryKey: adminQueryKeys.patient(appointment.patientId),
+              });
+            }
+          });
+
+          // Глобальный обработчик отмененных аппойнтментов
+          setGlobalHandler(
+            "appointment:cancelled",
+            ({ appointmentId, patientId }: any) => {
+              if (!mounted) return;
+              console.log(
+                "[SocketClient] appointment:cancelled received:",
+                appointmentId
+              );
+
+              queryClient.invalidateQueries({
+                queryKey: ["admin", "appointments"],
+              });
+              queryClient.invalidateQueries({
+                queryKey: adminQueryKeys.dashboard(),
+              });
+
+              if (patientId) {
+                queryClient.invalidateQueries({
+                  queryKey: adminQueryKeys.patient(patientId),
+                });
+              }
+            }
+          );
+
+          // Глобальный обработчик обновлений лечения
+          setGlobalHandler("treatment:update", ({ procedure }: any) => {
+            if (!mounted) return;
+            console.log(
+              "[SocketClient] treatment:update received:",
+              procedure?.id
+            );
+
+            const patientId = procedure?.treatmentPlan?.patientId;
+            if (patientId) {
+              queryClient.invalidateQueries({
+                queryKey: adminQueryKeys.treatmentPlans(patientId),
+              });
+              queryClient.invalidateQueries({
+                queryKey: adminQueryKeys.patient(patientId),
+              });
+            }
+          });
+
+          console.log("[SocketClient] Global handlers set up");
+        };
+
+        // Если уже подключен и авторизован, сразу настраиваем обработчики
+        if (socket.connected) {
+          // Проверяем, авторизован ли уже (ждем немного)
+          setTimeout(() => {
+            if (mounted && socket.connected) {
+              setupHandlers();
+              joinRoom("doctor:seed");
+            }
+          }, 500);
+        }
+      } catch (err) {
         console.error("[SocketClient] Failed to setup socket:", err);
-      });
+      }
+    };
+
+    setupSocket();
+
+    return () => {
+      mounted = false;
+    };
   }, [queryClient]);
 
   return null;

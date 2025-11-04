@@ -5,7 +5,8 @@ import type { Namespace } from "socket.io";
 export function createRedisAdapter(ns: Namespace) {
   const pub = new Redis(process.env.REDIS_URL!);
   const sub = new Redis(process.env.REDIS_URL!);
-  ns.adapter(createAdapter(pub, sub));
+  const adapter = createAdapter(pub, sub);
+  (ns as any).adapter = adapter;
   return { pub, sub };
 }
 

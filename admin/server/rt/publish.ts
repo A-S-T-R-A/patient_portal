@@ -6,21 +6,45 @@ let nsRef: Namespace | null = null;
 export const publishApi = {
   setNamespace(ns: Namespace) {
     nsRef = ns;
+    console.log("[Publish API] Namespace set");
   },
 
   // всем
   broadcast(event: string, data: any) {
-    nsRef?.emit(event, attachMeta(data));
+    if (!nsRef) {
+      console.warn("[Publish API] Cannot broadcast: namespace not set");
+      return;
+    }
+    console.log(`[Publish API] Broadcasting event: ${event}`);
+    nsRef.emit(event, attachMeta(data));
   },
 
   // комнате
   toRoom(room: string, event: string, data: any) {
-    nsRef?.to(room).emit(event, attachMeta(data));
+    if (!nsRef) {
+      console.warn("[Publish API] Cannot send to room: namespace not set");
+      return;
+    }
+    console.log(`[Publish API] Sending to room ${room}: ${event}`);
+    nsRef.to(room).emit(event, attachMeta(data));
   },
 
   // конкретному пользователю (через u:<userId>)
   toUser(userId: string, event: string, data: any) {
-    nsRef?.to(`u:${userId}`).emit(event, attachMeta(data));
+    if (!nsRef) {
+      console.warn("[Publish API] Cannot send to user: namespace not set");
+      return;
+    }
+    console.log(`[Publish API] Sending to user ${userId}: ${event}`);
+
+    // Отправляем в персональную комнату пользователя
+    nsRef.to(`u:${userId}`).emit(event, attachMeta(data));
+
+    // Также отправляем в комнату patient:xxx для обратной совместимости
+    // (если это событие для пациента)
+    if (userId && !userId.startsWith("doctor:")) {
+      nsRef.to(`patient:${userId}`).emit(event, attachMeta(data));
+    }
   },
 };
 
@@ -34,24 +58,44 @@ function attachMeta<T extends object>(obj: T) {
   return obj;
 }
 
-// Примеры использования (из бизнес-логики/роутов Next.js):
-export function emitNewMessage(userId: string, message: any) {
-  publishApi.toUser(userId, SERVER_EVENTS.MESSAGE_NEW, { message });
+// Функции для отправки конкретных событий
+export function emitNewMessage(patientId: string, message: any) {
+  console.log(`[Publish API] emitNewMessage to patient ${patientId}`);
+  publishApi.toUser(patientId, SERVER_EVENTS.MESSAGE_NEW, { message });
 }
 
 export function emitAppointmentUpdate(patientId: string, appointment: any) {
-  publishApi.toUser(patientId, SERVER_EVENTS.APPOINTMENT_UPDATE, { appointment });
+  console.log(`[Publish API] emitAppointmentUpdate to patient ${patientId}`);
+  publishApi.toUser(patientId, SERVER_EVENTS.APPOINTMENT_UPDATE, {
+    appointment,
+  });
 }
 
-export function emitAppointmentNew(patientId: string, appointment: any, by: string) {
-  publishApi.toUser(patientId, SERVER_EVENTS.APPOINTMENT_NEW, { appointment, by });
+export function emitAppointmentNew(
+  patientId: string,
+  appointment: any,
+  by: string
+) {
+  console.log(`[Publish API] emitAppointmentNew to patient ${patientId}`);
+  publishApi.toUser(patientId, SERVER_EVENTS.APPOINTMENT_NEW, {
+    appointment,
+    by,
+  });
 }
 
-export function emitAppointmentCancelled(patientId: string, appointmentId: string, by: string) {
-  publishApi.toUser(patientId, SERVER_EVENTS.APPOINTMENT_CANCELLED, { appointmentId, by });
+export function emitAppointmentCancelled(
+  patientId: string,
+  appointmentId: string,
+  by: string
+) {
+  console.log(`[Publish API] emitAppointmentCancelled to patient ${patientId}`);
+  publishApi.toUser(patientId, SERVER_EVENTS.APPOINTMENT_CANCELLED, {
+    appointmentId,
+    by,
+  });
 }
 
 export function emitTreatmentUpdate(patientId: string, procedure: any) {
+  console.log(`[Publish API] emitTreatmentUpdate to patient ${patientId}`);
   publishApi.toUser(patientId, SERVER_EVENTS.TREATMENT_UPDATE, { procedure });
 }
-

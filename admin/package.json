@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "node server.js",
     "build": "prisma generate && next build",
-    "start": "NODE_ENV=production node server.js",
-    "socket": "node lib/socket-server.js"
+    "start": "NODE_ENV=production node server.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
