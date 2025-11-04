@@ -43,43 +43,107 @@ async function fetchSocketToken(baseUrl: string): Promise<string> {
                "https://patient-portal-admin-service-production.up.railway.app";
   }
   
+  console.log("[socket] Fetching socket_token from:", `${authBase}/api/rt/issue-socket-token`);
+  
   // Используем fetchWithAuth из api.ts для автоматической передачи токена
   const { fetchWithAuth } = await import("./api");
   
   const res = await fetchWithAuth(`${authBase}/api/rt/issue-socket-token`);
-  if (!res.ok) throw new Error("Failed to get socket token");
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error("[socket] Failed to get socket token:", res.status, errorText);
+    throw new Error(`Failed to get socket token: ${res.status}`);
+  }
   
   const data = await res.json();
-  if (!data?.socketToken) throw new Error("No socketToken");
+  if (!data?.socketToken) {
+    console.error("[socket] No socketToken in response:", data);
+    throw new Error("No socketToken in response");
+  }
+  
+  console.log("[socket] socket_token received, length:", data.socketToken.length);
   return data.socketToken;
 }
 
-export function getSocket(opts: ConnectOpts): Socket {
-  if (singleton) return singleton;
+let socketTokenPromise: Promise<string> | null = null;
 
-  singleton = io(`${opts.baseUrl}${NAMESPACE}`, {
-    path: "/socket.io",
-    transports: ["websocket"], // RN: только ws
-    auth: {
-      socket_token: opts.socketToken, // главный вариант
-    },
-    extraHeaders: {
-      socket_token: opts.socketToken, // резерв, если auth не прокинется
-    },
-  });
+export async function getSocket(opts: ConnectOpts): Promise<Socket> {
+  if (singleton && singleton.connected) {
+    console.log("[socket] Reusing existing connected socket");
+    return singleton;
+  }
 
-  singleton.on("connect", () => rewire());
+  // Получаем socket_token если не передан
+  let token = opts.socketToken;
+  if (!token) {
+    console.log("[socket] No token provided, fetching...");
+    if (!socketTokenPromise) {
+      socketTokenPromise = fetchSocketToken(opts.baseUrl);
+    }
+    token = await socketTokenPromise;
+    socketTokenPromise = null; // Сброс после использования
+    console.log("[socket] Token obtained, length:", token.length);
+  } else {
+    console.log("[socket] Using provided token");
+  }
 
-  singleton.io.on("reconnect", () => rewire());
+  if (singleton && !singleton.connected) {
+    console.log("[socket] Socket exists but not connected, recreating...");
+    singleton.disconnect();
+    singleton = null;
+  }
 
-  singleton.on("disconnect", (reason) => {
-    console.log("[WS] RN disconnected:", reason);
-  });
+  if (!singleton) {
+    console.log("[socket] Creating new socket connection to:", `${opts.baseUrl}${NAMESPACE}`, "with token length:", token.length);
+    singleton = io(`${opts.baseUrl}${NAMESPACE}`, {
+      path: "/socket.io",
+      transports: ["websocket"], // RN: только ws
+      auth: {
+        socket_token: token, // главный вариант
+      },
+      extraHeaders: {
+        socket_token: token, // резерв, если auth не прокинется
+      },
+    });
+    console.log("[socket] Socket created, connecting...");
 
-  function rewire() {
-    rewireGlobalHandlers(singleton!);
-    if (joinedRooms.size) {
-      singleton!.emit("join", { rooms: Array.from(joinedRooms) }, () => {});
+    singleton.on("connect", () => {
+      console.log("[socket] Connected! Socket ID:", singleton?.id);
+      rewire();
+    });
+
+    singleton.io.on("reconnect", () => rewire());
+
+    singleton.on("disconnect", (reason) => {
+      console.log("[WS] RN disconnected:", reason);
+    });
+
+    singleton.on("connect_error", (err) => {
+      console.error("[WS] RN connect_error:", err.message);
+      // При ошибке авторизации - получаем новый токен
+      if (err.message?.includes("AUTH_ERROR") || err.message?.includes("INVALID_TOKEN")) {
+        console.log("[WS] RN Auth error, will retry with new token");
+        socketTokenPromise = null; // Сброс для нового токена
+      }
+    });
+
+    singleton.on("core:auth:error", (data: any) => {
+      console.error("[WS] RN Auth error from server:", data);
+      // Отключаемся и очищаем для переподключения
+      singleton?.disconnect();
+      singleton = null;
+      socketTokenPromise = null;
+    });
+
+    singleton.on("core:auth:success", () => {
+      console.log("[WS] RN Auth success");
+    });
+
+    function rewire() {
+      rewireGlobalHandlers(singleton!);
+      if (joinedRooms.size) {
+        singleton!.emit("join", { rooms: Array.from(joinedRooms) }, () => {});
+      }
     }
   }
 

@@ -136,7 +136,7 @@ function AppointmentsContent() {
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
             <div className="divide-y divide-slate-200">
-              {appointments.map((apt) => (
+              {appointments.map((apt: any) => (
                 <Link
                   key={apt.id}
                   href={`/patients/${apt.patient.id}`}

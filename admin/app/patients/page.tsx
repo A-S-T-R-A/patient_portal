@@ -85,7 +85,7 @@ function PatientsPageInner() {
                 </tr>
               </thead>
               <tbody>
-                {patients.map((p) => (
+                {patients.map((p: any) => (
                   <tr key={p.id} className="border-b hover:bg-gray-50">
                     <td className="py-2 pr-4">{p.name}</td>
                     <td className="py-2 pr-4">{p.email}</td>

@@ -8,11 +8,10 @@ export default function SocketClient() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // 1) Получаем socket_token (создаст cookie + вернёт JSON)
-    fetch("/api/rt/issue-socket-token")
-      .then(() => {
-        // 2) Подключаемся
-        const socket = getSocket({ baseUrl: window.location.origin });
+    // 1) Получаем socket_token и подключаемся
+    (async () => {
+      try {
+        const socket = await getSocket({ baseUrl: window.location.origin });
 
         // 3) Глобальный обработчик новых сообщений
         setGlobalHandler("message:new", ({ message }: any) => {
@@ -58,10 +57,10 @@ export default function SocketClient() {
 
         // 6) Входим в комнаты (для доктора)
         joinRoom("doctor:seed");
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error("[SocketClient] Failed to setup socket:", err);
-      });
+      }
+    })();
   }, [queryClient]);
 
   return null;

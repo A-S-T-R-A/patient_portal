@@ -81,7 +81,7 @@ function TreatmentPlansSection({
         <p className="text-slate-500">No treatment plans</p>
       ) : (
         <div className="space-y-3 mt-3">
-          {plans.map((plan) => (
+          {plans.map((plan: any) => (
             <div key={plan.id} className="border rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -591,34 +591,44 @@ export default function PatientDetail({
     let mounted = true;
     
     // Use singleton socket - don't disconnect it, just change rooms
-    const socket = getSocket({ baseUrl: window.location.origin });
+    (async () => {
+      try {
+        const socket = await getSocket({ baseUrl: window.location.origin });
 
-    // Store socket reference globally for sendMessage
-    (window as any).__adminPatientSocket = socket;
-    (window as any).__adminPatientId = patientId;
+        // Store socket reference globally for sendMessage
+        (window as any).__adminPatientSocket = socket;
+        (window as any).__adminPatientId = patientId;
 
-    // Setup message listener with patientId filter to ensure we only get messages for this patient
-    const messageHandler = ({ message }: any) => {
-      // Only add message if it's for this patient
-      if (mounted && message?.patientId === patientId) {
-        setMessages((m) => [...m, message]);
+        // Setup message listener with patientId filter to ensure we only get messages for this patient
+        const messageHandler = ({ message }: any) => {
+          // Only add message if it's for this patient
+          if (mounted && message?.patientId === patientId) {
+            setMessages((m) => [...m, message]);
+          }
+        };
+
+        // Remove any existing listener first to prevent duplicates
+        socket.off("message:new");
+        socket.on("message:new", messageHandler);
+
+        return () => {
+          mounted = false;
+          // Only cleanup listener, don't disconnect socket
+          const currentSocket = (window as any).__adminPatientSocket;
+          if (currentSocket) {
+            currentSocket.off("message:new", messageHandler);
+          }
+          // Clear global reference if this is still the current patient
+          if ((window as any).__adminPatientId === patientId) {
+            (window as any).__adminPatientSocket = null;
+            (window as any).__adminPatientId = null;
+          }
+        };
+      } catch (err) {
+        console.error("[patients/[id]] Failed to setup socket:", err);
+        mounted = false;
       }
-    };
-
-    // Remove any existing listener first to prevent duplicates
-    socket.off("message:new");
-    socket.on("message:new", messageHandler);
-
-    return () => {
-      mounted = false;
-      // Only cleanup listener, don't disconnect socket
-      socket.off("message:new", messageHandler);
-      // Clear global reference if this is still the current patient
-      if ((window as any).__adminPatientId === patientId) {
-        (window as any).__adminPatientSocket = null;
-        (window as any).__adminPatientId = null;
-      }
-    };
+    })();
   }, [patientId]);
 
   useLayoutEffect(() => {
@@ -637,7 +647,7 @@ export default function PatientDetail({
 
     // If socket doesn't exist (shouldn't happen), create it
     if (!socket) {
-      socket = getSocket({ baseUrl: window.location.origin });
+      socket = await getSocket({ baseUrl: window.location.origin });
       (window as any).__adminPatientSocket = socket;
     }
 
@@ -745,7 +755,7 @@ export default function PatientDetail({
           <p className="text-slate-500">No appointments</p>
         ) : (
           <ul className="space-y-2 mt-3">
-            {appointments.map((a) => (
+            {appointments.map((a: any) => (
               <li
                 key={a.id}
                 className="border rounded-lg p-3 flex items-center justify-between hover:bg-slate-50 transition"
@@ -763,7 +773,7 @@ export default function PatientDetail({
                       <input
                         type="datetime-local"
                         className="border rounded px-2 py-1 text-sm"
-                        value={reschedule.when}
+                        value={reschedule?.when || ""}
                         min={new Date().toISOString().slice(0, 16)}
                         onChange={(e) =>
                           setReschedule({ id: a.id, when: e.target.value })
@@ -772,7 +782,7 @@ export default function PatientDetail({
                       <button
                         className="px-2 py-1 text-sm bg-blue-600 text-white rounded shadow"
                         onClick={doReschedule}
-                        disabled={!reschedule.when}
+                        disabled={!reschedule?.when}
                       >
                         Save
                       </button>

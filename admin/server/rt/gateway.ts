@@ -73,10 +73,11 @@ export function initRtGateway(server: HttpServer) {
       wireClientHandlers(ns, client);
 
       client.emit(SERVER_EVENTS.AUTH_SUCCESS, { ok: true });
+      console.log("[RT] Client authenticated:", client.user?.id);
     } catch (e) {
       console.error("[RT] Auth error:", e);
       client.emit(SERVER_EVENTS.AUTH_ERROR, { error: "INVALID_TOKEN" });
-      return client.disconnect();
+      client.disconnect();
     }
   });
 
