@@ -595,34 +595,44 @@ export default function PatientDetail({
     let mounted = true;
 
     // Use singleton socket - don't disconnect it, just change rooms
-    const socket = getSocket({ baseUrl: window.location.origin });
+    (async () => {
+      try {
+        const socket = await getSocket({ baseUrl: window.location.origin });
 
-    // Store socket reference globally for sendMessage
-    (window as any).__adminPatientSocket = socket;
-    (window as any).__adminPatientId = patientId;
+        // Store socket reference globally for sendMessage
+        (window as any).__adminPatientSocket = socket;
+        (window as any).__adminPatientId = patientId;
 
-    // Setup message listener with patientId filter to ensure we only get messages for this patient
-    const messageHandler = ({ message }: any) => {
-      // Only add message if it's for this patient
-      if (mounted && message?.patientId === patientId) {
-        setMessages((m) => [...m, message]);
+        // Setup message listener with patientId filter to ensure we only get messages for this patient
+        const messageHandler = ({ message }: any) => {
+          // Only add message if it's for this patient
+          if (mounted && message?.patientId === patientId) {
+            setMessages((m) => [...m, message]);
+          }
+        };
+
+        // Remove any existing listener first to prevent duplicates
+        socket.off("message:new");
+        socket.on("message:new", messageHandler);
+
+        return () => {
+          mounted = false;
+          // Only cleanup listener, don't disconnect socket
+          const currentSocket = (window as any).__adminPatientSocket;
+          if (currentSocket) {
+            currentSocket.off("message:new", messageHandler);
+          }
+          // Clear global reference if this is still the current patient
+          if ((window as any).__adminPatientId === patientId) {
+            (window as any).__adminPatientSocket = null;
+            (window as any).__adminPatientId = null;
+          }
+        };
+      } catch (err) {
+        console.error("[patients/[id]] Failed to setup socket:", err);
+        mounted = false;
       }
-    };
-
-    // Remove any existing listener first to prevent duplicates
-    socket.off("message:new");
-    socket.on("message:new", messageHandler);
-
-    return () => {
-      mounted = false;
-      // Only cleanup listener, don't disconnect socket
-      socket.off("message:new", messageHandler);
-      // Clear global reference if this is still the current patient
-      if ((window as any).__adminPatientId === patientId) {
-        (window as any).__adminPatientSocket = null;
-        (window as any).__adminPatientId = null;
-      }
-    };
+    })();
   }, [patientId]);
 
   useLayoutEffect(() => {
@@ -641,7 +651,7 @@ export default function PatientDetail({
 
     // If socket doesn't exist (shouldn't happen), create it
     if (!socket) {
-      socket = getSocket({ baseUrl: window.location.origin });
+      socket = await getSocket({ baseUrl: window.location.origin });
       (window as any).__adminPatientSocket = socket;
     }
 
