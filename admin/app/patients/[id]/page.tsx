@@ -34,10 +34,11 @@ function TreatmentPlansSection({
   patientId: string;
   appointments: Appointment[];
 }) {
-  const { data: plansData, refetch: refetchPlans } = useTreatmentPlans(patientId);
+  const { data: plansData, refetch: refetchPlans } =
+    useTreatmentPlans(patientId);
   const plans = plansData?.plans ?? [];
   const invalidate = useInvalidateAdminQueries();
-  
+
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [showProcedureForm, setShowProcedureForm] = useState<string | null>(
     null
@@ -115,7 +116,9 @@ function TreatmentPlansSection({
                   <ProceduresList
                     planId={plan.id}
                     appointments={appointments}
-                    onUpdate={() => invalidate.invalidateTreatmentPlans(patientId)}
+                    onUpdate={() =>
+                      invalidate.invalidateTreatmentPlans(patientId)
+                    }
                     procedures={(plan as any).procedures}
                   />
                   {showProcedureForm === plan.id && (
@@ -561,9 +564,10 @@ export default function PatientDetail({
 }) {
   const { id: patientId } = React.use(params);
   const invalidate = useInvalidateAdminQueries();
-  const { data: patientData, isLoading: isLoadingPatient } = usePatient(patientId);
+  const { data: patientData, isLoading: isLoadingPatient } =
+    usePatient(patientId);
   const { data: plansData } = useTreatmentPlans(patientId);
-  
+
   const patient = patientData?.patient || null;
   const plans = plansData?.plans ?? [];
   const appointments = patientData?.appointments ?? [];
@@ -589,7 +593,7 @@ export default function PatientDetail({
   useEffect(() => {
     if (!patientId) return;
     let mounted = true;
-    
+
     // Use singleton socket - don't disconnect it, just change rooms
     const socket = getSocket({ baseUrl: window.location.origin });
 
@@ -763,7 +767,7 @@ export default function PatientDetail({
                       <input
                         type="datetime-local"
                         className="border rounded px-2 py-1 text-sm"
-                        value={reschedule?.when || ''}
+                        value={reschedule?.when || ""}
                         min={new Date().toISOString().slice(0, 16)}
                         onChange={(e) =>
                           setReschedule({ id: a.id, when: e.target.value })

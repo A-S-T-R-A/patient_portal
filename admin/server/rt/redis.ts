@@ -9,4 +9,3 @@ export function createRedisAdapter(ns: Namespace) {
   (ns as any).adapter = adapter;
   return { pub, sub };
 }
-
