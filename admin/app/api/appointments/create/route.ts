@@ -37,8 +37,14 @@ export async function POST(req: NextRequest) {
     // For now, we'll just create the appointment
 
     // Emit socket event for real-time updates
-    const { emitAppointmentNew } = await import("@/server/rt/publish");
-    emitAppointmentNew(patientId, appointment, "doctor");
+    const io = (global as any).__io;
+    if (io) {
+      // Emit appointment:new for new appointments
+      io.to(`patient:${patientId}`).emit("appointment:new", {
+        appointment,
+        by: "doctor",
+      });
+    }
 
     return Response.json({ appointment });
   } catch (error: any) {

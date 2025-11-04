@@ -6,8 +6,7 @@ import {
   useInvalidateAdminQueries,
 } from "@/lib/admin-queries";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { API_BASE } from "@/lib/api";
-import { getSocket } from "@/lib/socket";
+import { API_BASE, connectSocket } from "@/lib/api";
 
 type Appointment = {
   id: string;
@@ -597,7 +596,7 @@ export default function PatientDetail({
     // Use singleton socket - don't disconnect it, just change rooms
     (async () => {
       try {
-        const socket = await getSocket({ baseUrl: window.location.origin });
+        const socket: any = connectSocket({ patientId });
 
         // Store socket reference globally for sendMessage
         (window as any).__adminPatientSocket = socket;
@@ -651,7 +650,7 @@ export default function PatientDetail({
 
     // If socket doesn't exist (shouldn't happen), create it
     if (!socket) {
-      socket = await getSocket({ baseUrl: window.location.origin });
+      socket = connectSocket({ patientId });
       (window as any).__adminPatientSocket = socket;
     }
 

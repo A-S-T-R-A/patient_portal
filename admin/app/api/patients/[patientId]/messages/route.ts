@@ -26,9 +26,6 @@ export async function POST(
   });
   broadcast("message.new", { message }, { patientId });
   wsBroadcast("message.new", { message }, { patientId });
-  // Emit socket event for real-time updates
-  const { emitNewMessage } = await import("@/server/rt/publish");
-  emitNewMessage(patientId, message);
   return Response.json({ message });
 }
 
@@ -43,9 +40,12 @@ export async function DELETE(
     where: { patientId },
   });
 
-  // Emit socket event to notify patient
-  const { publishApi } = await import("@/server/rt/publish");
-  publishApi.toUser(patientId, "messages:cleared", { patientId });
+  // Emit socket event to notify both doctor and patient
+  const io = (global as any).__io;
+  if (io) {
+    io.to(`patient:${patientId}`).emit("messages:cleared", { patientId });
+    io.to(`doctor:*`).emit("messages:cleared", { patientId });
+  }
 
   return Response.json({ success: true });
 }

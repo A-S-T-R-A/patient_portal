@@ -25,8 +25,13 @@ export async function DELETE(
     });
 
     // Emit socket event for real-time updates
-    const { emitAppointmentCancelled } = await import("@/server/rt/publish");
-    emitAppointmentCancelled(appointment.patientId, appointmentId, "doctor");
+    const io = (global as any).__io;
+    if (io) {
+      io.to(`patient:${appointment.patientId}`).emit("appointment:cancelled", {
+        appointmentId,
+        by: "doctor",
+      });
+    }
 
     return Response.json({ success: true });
   } catch (error: any) {

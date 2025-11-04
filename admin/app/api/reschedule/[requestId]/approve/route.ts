@@ -34,8 +34,12 @@ export async function POST(
     { appointment: appt },
     { patientId: appt.patientId }
   );
-  // Emit socket event for real-time updates
-  const { emitAppointmentUpdate } = await import("@/server/rt/publish");
-  emitAppointmentUpdate(appt.patientId, appt);
+  try {
+    const io = getIO();
+    io?.to(`patient:${appt.patientId}`).emit("appointment:update", {
+      appointment: appt,
+      by: "patient",
+    });
+  } catch {}
   return Response.json({ request: updatedReq, appointment: appt });
 }

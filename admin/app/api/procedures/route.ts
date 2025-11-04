@@ -51,8 +51,12 @@ export async function POST(req: NextRequest) {
         select: { patientId: true },
       });
       if (plan) {
-        const { emitTreatmentUpdate } = await import("@/server/rt/publish");
-        emitTreatmentUpdate(plan.patientId, procedure);
+        const io = (global as any).__io;
+        if (io) {
+          io.to(`patient:${plan.patientId}`).emit("treatment:update", {
+            procedure,
+          });
+        }
       }
     }
 
@@ -105,8 +109,13 @@ export async function PATCH(req: NextRequest) {
 
     // Emit socket event
     if (procedure.treatmentPlan) {
-      const { emitTreatmentUpdate } = await import("@/server/rt/publish");
-      emitTreatmentUpdate(procedure.treatmentPlan.patientId, procedure);
+      const io = (global as any).__io;
+      if (io) {
+        io.to(`patient:${procedure.treatmentPlan.patientId}`).emit(
+          "treatment:update",
+          { procedure }
+        );
+      }
     }
 
     return Response.json({ procedure });
